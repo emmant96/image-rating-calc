@@ -1,0 +1,3 @@
+# Normalise line endings in the repo so a Windows checkout and the Linux CI
+# runner see identical files.
+* text=auto eol=lf

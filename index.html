@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Hedgehog Decision Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+      // Babel's stock "react" preset now defaults to the automatic JSX runtime, which
+      // emits `import ... from "react/jsx-runtime"`. That cannot run in a plain (non-module)
+      // script, so JSX would silently never execute. Pin the classic runtime instead, which
+      // compiles to React.createElement and works with the UMD global loaded above.
+      Babel.registerPreset('react-classic', {
+        presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]],
+      })
+    </script>
+    <style>
+      /* Hide the un-transpiled app until Babel has run, so no flash of raw text. */
+      #root:empty::after {
+        content: 'Loading...';
+        display: block;
+        padding: 3rem;
+        text-align: center;
+        color: #64748b;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <!-- Background lives on <body> so the dark theme covers the full viewport, not just the content. -->
+  <body class="bg-slate-950">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react-classic">
+      const { useCallback, useEffect, useMemo, useState } = React
+
+      /* ================================================================
+       * SCORING ENGINE
+       * Kept free of React so it can be tested on its own.
+       * ---8<--- SCORING START
+       * ================================================================ */
+
+      const AXES = {
+        instruction: {
+          key: 'instruction',
+          title: 'Instruction Following',
+          blurb:
+            'Did the picture do what it was told to do? If the words asked for a red hat, is there a red hat? This one breaks ties, so read it carefully.',
+        },
+        personId: {
+          key: 'personId',
+          title: 'Person ID',
+          blurb:
+            'Does the person still look like the same person? Look at the face only. New clothes or a new pose is fine and does not count against it.',
+        },
+        refPreservation: {
+          key: 'refPreservation',
+          title: 'Reference Preservation',
+          blurb:
+            'Did everything you did NOT ask to change stay the same? Check the background, the small objects, and whether the picture zoomed in or moved on its own.',
+        },
+        visualQuality: {
+          key: 'visualQuality',
+          title: 'Visual Quality',
+          blurb:
+            'Does the whole picture just look good? It should not be blurry, too bright, too colorful, or washed out. Things should sit in nice spots.',
+        },
+        artifacts: {
+          key: 'artifacts',
+          title: 'AI Artifacts',
+          blurb:
+            'Look for small broken bits. Count the fingers. Check the hands and feet. Look for messy letters, or skin that looks like shiny plastic.',
+        },
+      }
+
+      const TASKS = {
+        r2i: {
+          id: 'r2i',
+          label: 'Reference-to-Image',
+          short: 'R2I',
+          tagline: 'You start with a real photo and change part of it. Keeping the face and the background right is what matters.',
+          axes: ['instruction', 'personId', 'refPreservation', 'visualQuality', 'artifacts'],
+        },
+        t2i: {
+          id: 't2i',
+          label: 'Text-to-Image',
+          short: 'T2I',
+          tagline: 'You start with only words. The whole picture is made from scratch, so following the words is what matters.',
+          axes: ['instruction', 'visualQuality', 'artifacts'],
+        },
+      }
+
+      const OPTIONS = [
+        { value: 2, label: 'Strongly A', side: 'A' },
+        { value: 1, label: 'Slightly A', side: 'A' },
+        { value: 0, label: 'Tie', side: 'T' },
+        { value: -1, label: 'Slightly B', side: 'B' },
+        { value: -2, label: 'Strongly B', side: 'B' },
+      ]
+
+      const VERDICTS = {
+        STRONG_A: { label: 'Strongly A', side: 'A' },
+        SLIGHT_A: { label: 'Slightly A', side: 'A' },
+        TIE: { label: 'Tie', side: 'T' },
+        SLIGHT_B: { label: 'Slightly B', side: 'B' },
+        STRONG_B: { label: 'Strongly B', side: 'B' },
+      }
+
+      /** Instruction Following is the absolute tie-breaker on a true dimension split. */
+      function tieBreak(instructionScore) {
+        if (instructionScore > 0)
+          return {
+            verdict: VERDICTS.SLIGHT_A,
+            why: 'Both sides win the same number of axes, so Instruction Following decides. It favors A.',
+          }
+        if (instructionScore < 0)
+          return {
+            verdict: VERDICTS.SLIGHT_B,
+            why: 'Both sides win the same number of axes, so Instruction Following decides. It favors B.',
+          }
+        return {
+          verdict: VERDICTS.TIE,
+          why: 'Both sides win the same number of axes and Instruction Following is a Tie, so neither side wins.',
+        }
+      }
+
+      /**
+       * Compute the overall preference for a task.
+       * Returns null while any axis is still unscored.
+       */
+      function computeResult(taskId, scores) {
+        const axisKeys = TASKS[taskId].axes
+        const values = axisKeys.map((k) => scores[k])
+        if (values.some((v) => v === undefined || v === null)) return null
+
+        const winsA = values.filter((v) => v > 0).length
+        const winsB = values.filter((v) => v < 0).length
+        const net = values.reduce((sum, v) => sum + v, 0)
+        const base = { winsA, winsB, net }
+
+        // Equal category wins means a true dimension split, so Instruction Following decides.
+        if (winsA === winsB) return Object.assign({}, base, tieBreak(scores.instruction))
+
+        const aWins = winsA > winsB
+        const winner = aWins ? 'A' : 'B'
+        const wins = aWins ? winsA : winsB
+        const total = axisKeys.length
+
+        const strong =
+          taskId === 'r2i'
+            ? // R2I: magnitude comes from the combined net point total of 3 or beyond.
+              aWins
+              ? net >= 3
+              : net <= -3
+            : // T2I: a clean sweep, or a 2-axis win carrying heavy net weight.
+              wins === total || (wins >= 2 && Math.abs(net) >= 3)
+
+        const verdict = aWins
+          ? strong
+            ? VERDICTS.STRONG_A
+            : VERDICTS.SLIGHT_A
+          : strong
+            ? VERDICTS.STRONG_B
+            : VERDICTS.SLIGHT_B
+
+        const signed = net > 0 ? '+' + net : '' + net
+        const why = strong
+          ? winner + ' wins ' + wins + ' of ' + total + ' axes with a net score of ' + signed + '. That is a big lead.'
+          : winner + ' wins ' + wins + ' of ' + total + ' axes with a net score of ' + signed + '. That is a small lead.'
+
+        return Object.assign({}, base, { verdict, why })
+      }
+
+      /* ---8<--- SCORING END */
+
+      /* ================================================================
+       * Presentation helpers
+       * ================================================================ */
+
+      const SIDE_THEME = {
+        A: {
+          card: 'bg-emerald-500/10 border-emerald-400/40 ring-emerald-400/20',
+          chip: 'bg-emerald-500 text-emerald-950',
+          pill: 'bg-emerald-500 text-emerald-950 shadow-emerald-500/30',
+        },
+        B: {
+          card: 'bg-amber-500/10 border-amber-400/40 ring-amber-400/20',
+          chip: 'bg-amber-500 text-amber-950',
+          pill: 'bg-amber-500 text-amber-950 shadow-amber-500/30',
+        },
+        T: {
+          card: 'bg-slate-500/10 border-slate-400/40 ring-slate-400/20',
+          chip: 'bg-slate-400 text-slate-950',
+          pill: 'bg-slate-300 text-slate-900 shadow-slate-400/30',
+        },
+      }
+
+      const cx = (...c) => c.filter(Boolean).join(' ')
+
+      /* ================================================================
+       * Screens
+       * ================================================================ */
+
+      function TaskCard({ task, onSelect }) {
+        return (
+          <button
+            onClick={() => onSelect(task.id)}
+            className="group relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/60 p-7 text-left transition hover:-translate-y-1 hover:border-indigo-400/60 hover:bg-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 sm:p-8"
+          >
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-indigo-500/10 blur-2xl transition group-hover:bg-indigo-500/25" />
+            <span className="inline-flex w-fit items-center rounded-lg bg-indigo-500/15 px-2.5 py-1 text-xs font-bold tracking-widest text-indigo-300">
+              {task.short}
+            </span>
+            <div>
+              <h3 className="text-xl font-semibold text-slate-50 sm:text-2xl">{task.label} Task</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{task.tagline}</p>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-sm font-medium text-indigo-300">
+              {task.axes.length} scoring axes
+              <span className="transition group-hover:translate-x-1">&rarr;</span>
+            </div>
+          </button>
+        )
+      }
+
+      function AxisRow({ axis, index, value, onChange }) {
+        return (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 transition hover:border-slate-700 sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-800 text-xs font-bold text-slate-400">
+                {index + 1}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-slate-100 sm:text-lg">{axis.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{axis.blurb}</p>
+              </div>
+            </div>
+
+            <div role="radiogroup" aria-label={axis.title} className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {OPTIONS.map((opt) => {
+                const active = value === opt.value
+                const theme = SIDE_THEME[opt.side]
+                return (
+                  <button
+                    key={opt.value}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => onChange(axis.key, active ? undefined : opt.value)}
+                    className={cx(
+                      'rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                      opt.value === 0 && 'col-span-2 sm:col-span-1',
+                      active
+                        ? cx(theme.pill, 'shadow-lg')
+                        : 'bg-slate-800/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )
+      }
+
+      function ResultCard({ result, filled, total }) {
+        const theme = result ? SIDE_THEME[result.verdict.side] : null
+
+        return (
+          <div
+            className={cx(
+              'rounded-2xl border p-6 ring-1 transition-all duration-300',
+              result ? theme.card : 'border-slate-800 bg-slate-900/50 ring-transparent'
+            )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Overall Preference Result</h2>
+              <span className="rounded-md bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-400">
+                {filled}/{total}
+              </span>
+            </div>
+
+            {result ? (
+              <React.Fragment>
+                <div className={cx('mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-2xl font-bold', theme.chip)}>
+                  {result.verdict.label}
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-slate-300">{result.why}</p>
+                <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-white/10 pt-4 text-center">
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wider text-slate-500">A wins</dt>
+                    <dd className="mt-1 text-lg font-semibold text-emerald-300">{result.winsA}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wider text-slate-500">B wins</dt>
+                    <dd className="mt-1 text-lg font-semibold text-amber-300">{result.winsB}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wider text-slate-500">Net</dt>
+                    <dd className="mt-1 text-lg font-semibold text-slate-200">
+                      {result.net > 0 ? '+' + result.net : result.net}
+                    </dd>
+                  </div>
+                </dl>
+              </React.Fragment>
+            ) : (
+              <React.Fragment>
+                <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                    style={{ width: (filled / total) * 100 + '%' }}
+                  />
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-slate-400">
+                  Please score all axes to calculate overall preference.
+                </p>
+              </React.Fragment>
+            )}
+          </div>
+        )
+      }
+
+      /* ================================================================
+       * App
+       * ================================================================ */
+
+      function App() {
+        const [taskId, setTaskId] = useState(null)
+        const [scores, setScores] = useState({})
+
+        const task = taskId ? TASKS[taskId] : null
+
+        const setScore = useCallback((axisKey, value) => {
+          setScores((prev) => {
+            const next = Object.assign({}, prev)
+            if (value === undefined) delete next[axisKey]
+            else next[axisKey] = value
+            return next
+          })
+        }, [])
+
+        const reset = () => {
+          setTaskId(null)
+          setScores({})
+        }
+
+        const filled = task ? task.axes.filter((k) => scores[k] !== undefined).length : 0
+        const result = useMemo(() => (task ? computeResult(task.id, scores) : null), [task, scores])
+
+        // Keyboard shortcuts: 1 to 5 scores the next unfilled axis, Backspace undoes the last one.
+        useEffect(() => {
+          if (!task) return
+          const onKey = (e) => {
+            if (e.metaKey || e.ctrlKey || e.altKey) return
+            const idx = ['1', '2', '3', '4', '5'].indexOf(e.key)
+            if (idx !== -1) {
+              const nextAxis = task.axes.find((k) => scores[k] === undefined)
+              if (nextAxis) setScore(nextAxis, OPTIONS[idx].value)
+              return
+            }
+            if (e.key === 'Backspace') {
+              const lastFilled = task.axes.slice().reverse().find((k) => scores[k] !== undefined)
+              if (lastFilled) setScore(lastFilled, undefined)
+            }
+          }
+          window.addEventListener('keydown', onKey)
+          return () => window.removeEventListener('keydown', onKey)
+        }, [task, scores, setScore])
+
+        return (
+          <div className="min-h-screen bg-slate-950 text-slate-200 antialiased">
+            <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+              <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-lg">
+                    &#129428;
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold text-slate-50">Project Hedgehog</h1>
+                    <p className="text-xs tracking-wide text-slate-500">Decision Calculator</p>
+                  </div>
+                </div>
+                {task && (
+                  <button
+                    onClick={reset}
+                    className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                  >
+                    &larr; Back to Task Selection
+                  </button>
+                )}
+              </header>
+
+              {!task ? (
+                <main className="mx-auto max-w-3xl">
+                  <h2 className="text-center text-2xl font-semibold text-slate-50 sm:text-3xl">
+                    Which task type are you evaluating?
+                  </h2>
+                  <p className="mt-3 text-center text-sm text-slate-400">
+                    Pick a task to load its scoring axes. Side A vs Side B, scored one axis at a time.
+                  </p>
+                  <div className="mt-8 grid gap-5 sm:grid-cols-2">
+                    {Object.keys(TASKS).map((id) => (
+                      <TaskCard key={id} task={TASKS[id]} onSelect={setTaskId} />
+                    ))}
+                  </div>
+                </main>
+              ) : (
+                <main className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="space-y-4">
+                    <div className="flex items-baseline justify-between">
+                      <h2 className="text-xl font-semibold text-slate-50">
+                        {task.label} <span className="text-slate-500">&middot; {task.axes.length} axes</span>
+                      </h2>
+                      <span className="hidden text-xs text-slate-500 sm:block">
+                        Keys <kbd className="rounded bg-slate-800 px-1.5 py-0.5">1</kbd> to{' '}
+                        <kbd className="rounded bg-slate-800 px-1.5 py-0.5">5</kbd> to score,{' '}
+                        <kbd className="rounded bg-slate-800 px-1.5 py-0.5">&#9003;</kbd> to undo
+                      </span>
+                    </div>
+
+                    {task.axes.map((key, i) => (
+                      <AxisRow key={key} index={i} axis={AXES[key]} value={scores[key]} onChange={setScore} />
+                    ))}
+                  </div>
+
+                  <aside className="lg:sticky lg:top-8">
+                    <ResultCard result={result} filled={filled} total={task.axes.length} />
+                    <button
+                      onClick={() => setScores({})}
+                      className="mt-3 w-full rounded-xl border border-slate-800 px-4 py-2.5 text-sm font-medium text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+                    >
+                      Clear scores
+                    </button>
+                  </aside>
+                </main>
+              )}
+            </div>
+          </div>
+        )
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+    </script>
+  </body>
+</html>

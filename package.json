@@ -1,0 +1,19 @@
+{
+  "name": "hedgehog-decision-calculator",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Decision calculator for Project Hedgehog image rating tasks. Source of truth is index.html; npm run build emits a fully self-contained dist/index.html.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test scoring.test.mjs"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-react": "^7.26.3",
+    "@tailwindcss/cli": "^4.1.11",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.1.11"
+  }
+}
