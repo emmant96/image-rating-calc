@@ -34,7 +34,7 @@
     <div id="root"></div>
 
     <script type="text/babel" data-presets="react-classic">
-      const { useCallback, useEffect, useMemo, useState } = React
+      const { useCallback, useEffect, useMemo, useRef, useState } = React
 
       /* ================================================================
        * SCORING ENGINE
@@ -171,6 +171,114 @@
           : winner + ' wins ' + wins + ' of ' + total + ' axes with a net score of ' + signed + '. That is a small lead.'
 
         return Object.assign({}, base, { verdict, why })
+      }
+
+      /* ----------------------------------------------------------------
+       * Open feedback starter
+       *
+       * Builds the opening lines of the written feedback from the scores.
+       * The calculator knows which axes each side won, so it can state the
+       * comparative claim, but it knows nothing about the images. It therefore
+       * stops mid-sentence and hands off to the tasker, who supplies the
+       * visual evidence. Target length is 150 to 200 characters.
+       *
+       * Correctness gates the wording: candidate sentences are built only from
+       * claims the scores support, and length then picks among those. Length
+       * must never be able to select a phrasing the scores contradict.
+       * ---------------------------------------------------------------- */
+
+      const STARTER_MIN = 150
+      const STARTER_MAX = 200
+
+      const AXIS_PHRASE = {
+        instruction: 'instruction following',
+        personId: 'person ID',
+        refPreservation: 'reference preservation',
+        visualQuality: 'visual quality',
+        artifacts: 'AI artifacts',
+      }
+
+      const AXIS_ORDER = ['instruction', 'personId', 'refPreservation', 'visualQuality', 'artifacts']
+
+      function phraseList(items) {
+        if (items.length <= 1) return items[0] || ''
+        return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1]
+      }
+
+      /** Axes the given side won, widest margin first, capped at max. */
+      function axesWonBy(scores, side, max) {
+        return AXIS_ORDER.filter((k) =>
+          side === 'A' ? scores[k] > 0 : scores[k] < 0
+        )
+          .sort((a, b) => Math.abs(scores[b]) - Math.abs(scores[a]))
+          .slice(0, max)
+          .map((k) => AXIS_PHRASE[k])
+      }
+
+      /** Longest core+tail pair inside the window, else the closest that fits under it. */
+      function pickStarter(cores, tails) {
+        const all = []
+        cores.forEach((c) => tails.forEach((t) => all.push(c + t)))
+        const fits = all.filter((s) => s.length >= STARTER_MIN && s.length <= STARTER_MAX)
+        if (fits.length) return fits.sort((a, b) => b.length - a.length)[0]
+        const under = all.filter((s) => s.length <= STARTER_MAX)
+        if (under.length) return under.sort((a, b) => b.length - a.length)[0]
+        return all.sort((a, b) => a.length - b.length)[0]
+      }
+
+      function buildStarter(scores, result) {
+        if (!result) return null
+
+        if (result.verdict.side === 'T') {
+          return pickStarter(
+            [
+              'Neither image is clearly preferred. The two are evenly matched across the scored dimensions, and instruction following does not separate them either.',
+              'Neither image is clearly preferred. The two are evenly matched across the scored dimensions.',
+            ],
+            [' The closest thing to a deciding detail is ', ' The deciding details are ', ' Looking closely, ']
+          )
+        }
+
+        const W = result.verdict.side
+        const L = W === 'A' ? 'B' : 'A'
+        const loserWon = (W === 'A' ? result.winsB : result.winsA) > 0
+        const split = result.winsA === result.winsB
+        const win = (n) => phraseList(axesWonBy(scores, W, n))
+        const lose = (n) => phraseList(axesWonBy(scores, L, n))
+
+        const cores = []
+
+        if (split) {
+          // Instruction Following decided it, so lead with that reason.
+          cores.push(
+            'Image ' + W + ' is preferred over Image ' + L + ' because the two split evenly across the scored dimensions and ' + W + ' follows the prompt more closely.',
+            'Image ' + W + ' is preferred over Image ' + L + ' because the dimensions split evenly and ' + W + ' follows the prompt more closely.'
+          )
+        }
+
+        if (loserWon) {
+          // The losing side won something, so every phrasing here must say so.
+          cores.push(
+            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(3) + '. ' + L + ' is stronger on ' + lose(2) + ', but that does not offset the difference.',
+            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(2) + '. ' + L + ' is stronger on ' + lose(2) + ', but that does not offset it.',
+            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(2) + ', while ' + L + ' is only stronger on ' + lose(1) + '.',
+            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(1) + ', while ' + L + ' is only stronger on ' + lose(1) + '.'
+          )
+        } else {
+          // Only claim a clean sweep when the other side genuinely won nothing.
+          cores.push(
+            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(3) + ' while ' + L + ' does not win any dimension outright.',
+            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(2) + ' while ' + L + ' does not win any dimension outright.',
+            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(1) + ' and ' + L + ' does not win any dimension outright.'
+          )
+        }
+
+        return pickStarter(cores, [
+          ' The difference is clearest in Image ' + W + ', where ',
+          ' This is most visible in Image ' + W + ', where ',
+          ' Specifically, in Image ' + W + ' ',
+          ' Looking closely, ',
+        ])
       }
 
       /* ---8<--- SCORING END */
@@ -322,6 +430,113 @@
         )
       }
 
+      function FeedbackStarter({ text }) {
+        // 'idle' | 'copied' | 'manual'. 'manual' means both copy paths were
+        // refused, so the text is selected and the user finishes with Ctrl+C.
+        const [status, setStatus] = useState('idle')
+        const textRef = useRef(null)
+
+        // Reset whenever the scores change the text underneath the button.
+        useEffect(() => setStatus('idle'), [text])
+
+        /** Legacy path: works without clipboard permission, needs a live selection. */
+        const copyViaTextarea = () => {
+          const ta = document.createElement('textarea')
+          ta.value = text
+          ta.setAttribute('readonly', '')
+          ta.style.position = 'fixed'
+          ta.style.top = '0'
+          ta.style.opacity = '0'
+          document.body.appendChild(ta)
+          ta.select()
+          let ok = false
+          try {
+            ok = document.execCommand('copy')
+          } catch (err) {
+            ok = false
+          }
+          document.body.removeChild(ta)
+          return ok
+        }
+
+        /** Last resort: select the visible text so Ctrl+C works by hand. */
+        const selectVisibleText = () => {
+          if (!textRef.current) return
+          const range = document.createRange()
+          range.selectNodeContents(textRef.current)
+          const sel = window.getSelection()
+          sel.removeAllRanges()
+          sel.addRange(range)
+        }
+
+        const copy = async () => {
+          // The async clipboard API is refused when the document is not focused
+          // or the permission is denied, so every path below has a fallback and
+          // the failure is always visible rather than a button that does nothing.
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(text)
+              setStatus('copied')
+              setTimeout(() => setStatus('idle'), 2000)
+              return
+            }
+          } catch (err) {
+            // Fall through to the legacy path below.
+          }
+
+          if (copyViaTextarea()) {
+            setStatus('copied')
+            setTimeout(() => setStatus('idle'), 2000)
+            return
+          }
+
+          selectVisibleText()
+          setStatus('manual')
+        }
+
+        const copied = status === 'copied'
+
+        return (
+          <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                Open feedback starter
+              </h3>
+              <span className="rounded-md bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-400">
+                {text.length} chars
+              </span>
+            </div>
+
+            <p
+              ref={textRef}
+              className="mt-3 rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-300 selection:bg-indigo-500/40"
+            >
+              {text}
+              <span className="text-slate-600">...</span>
+            </p>
+
+            <button
+              onClick={copy}
+              className={cx(
+                'mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                copied
+                  ? 'bg-emerald-500 text-emerald-950'
+                  : status === 'manual'
+                    ? 'bg-amber-500 text-amber-950'
+                    : 'bg-indigo-500 text-white hover:bg-indigo-400'
+              )}
+            >
+              {copied ? 'Copied' : status === 'manual' ? 'Selected, press Ctrl+C' : 'Copy starter'}
+            </button>
+
+            <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
+              Finish the sentence with what you actually saw, and where. Name the
+              specific tell rather than saying one looks better.
+            </p>
+          </div>
+        )
+      }
+
       /* ================================================================
        * App
        * ================================================================ */
@@ -348,6 +563,7 @@
 
         const filled = task ? task.axes.filter((k) => scores[k] !== undefined).length : 0
         const result = useMemo(() => (task ? computeResult(task.id, scores) : null), [task, scores])
+        const starter = useMemo(() => buildStarter(scores, result), [scores, result])
 
         // Keyboard shortcuts: 1 to 5 scores the next unfilled axis, Backspace undoes the last one.
         useEffect(() => {
@@ -427,6 +643,7 @@
 
                   <aside className="lg:sticky lg:top-8">
                     <ResultCard result={result} filled={filled} total={task.axes.length} />
+                    {starter && <FeedbackStarter text={starter} />}
                     <button
                       onClick={() => setScores({})}
                       className="mt-3 w-full rounded-xl border border-slate-800 px-4 py-2.5 text-sm font-medium text-slate-400 transition hover:border-slate-600 hover:text-slate-200"

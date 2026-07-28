@@ -17,10 +17,10 @@ function loadEngine() {
   const start = html.indexOf('*/', startMarker) + 2
   const end = html.lastIndexOf('/*', endMarker)
   const source = html.slice(start, end)
-  return new Function(source + '\n return { computeResult, TASKS }')()
+  return new Function(source + '\n return { computeResult, TASKS, buildStarter }')()
 }
 
-const { computeResult, TASKS } = loadEngine()
+const { computeResult, TASKS, buildStarter } = loadEngine()
 
 const r2i = ([instruction, personId, refPreservation, visualQuality, artifacts]) =>
   computeResult('r2i', { instruction, personId, refPreservation, visualQuality, artifacts })
@@ -83,6 +83,86 @@ test('tallies and net are reported', () => {
 test('task axis counts match the spec', () => {
   assert.equal(TASKS.r2i.axes.length, 5)
   assert.equal(TASKS.t2i.axes.length, 3)
+})
+
+/* ---------------- open feedback starter ---------------- */
+
+/** Every reachable R2I and T2I score combination. */
+function* allCombos(taskId) {
+  const axes = TASKS[taskId].axes
+  const values = [2, 1, 0, -1, -2]
+  const total = Math.pow(5, axes.length)
+  for (let i = 0; i < total; i++) {
+    const scores = {}
+    let n = i
+    for (const axis of axes) {
+      scores[axis] = values[n % 5]
+      n = Math.floor(n / 5)
+    }
+    yield scores
+  }
+}
+
+test('starter is null until every axis is scored', () => {
+  assert.equal(buildStarter({ instruction: 2 }, computeResult('r2i', { instruction: 2 })), null)
+})
+
+test('starter stays within 150 to 200 characters for every combination', () => {
+  for (const taskId of ['r2i', 't2i']) {
+    for (const scores of allCombos(taskId)) {
+      const text = buildStarter(scores, computeResult(taskId, scores))
+      assert.ok(
+        text.length >= 150 && text.length <= 200,
+        `${taskId} ${JSON.stringify(scores)} produced ${text.length} chars: ${text}`
+      )
+    }
+  }
+})
+
+test('starter never claims a clean sweep when the losing side won an axis', () => {
+  for (const taskId of ['r2i', 't2i']) {
+    for (const scores of allCombos(taskId)) {
+      const result = computeResult(taskId, scores)
+      const text = buildStarter(scores, result)
+      if (!/does not win any dimension outright/.test(text)) continue
+      const loserWins = result.verdict.side === 'A' ? result.winsB : result.winsA
+      assert.equal(
+        loserWins,
+        0,
+        `false sweep claim for ${taskId} ${JSON.stringify(scores)}: ${text}`
+      )
+    }
+  }
+})
+
+test('starter names the side the engine actually picked', () => {
+  for (const taskId of ['r2i', 't2i']) {
+    for (const scores of allCombos(taskId)) {
+      const result = computeResult(taskId, scores)
+      const text = buildStarter(scores, result)
+      if (result.verdict.side === 'T') {
+        assert.match(text, /^Neither image is clearly preferred/)
+      } else {
+        const loser = result.verdict.side === 'A' ? 'B' : 'A'
+        assert.ok(
+          text.startsWith(`Image ${result.verdict.side} is preferred over Image ${loser}`),
+          `starter disagrees with verdict ${result.verdict.label}: ${text}`
+        )
+      }
+    }
+  }
+})
+
+test('starter ends mid-sentence so it cannot pass as finished feedback', () => {
+  for (const taskId of ['r2i', 't2i']) {
+    for (const scores of allCombos(taskId)) {
+      const text = buildStarter(scores, computeResult(taskId, scores))
+      // A trailing space with no closing punctuation reads as unfinished,
+      // which is what discourages submitting the starter as the whole answer.
+      assert.ok(text.endsWith(' '), `starter should trail a space: ${text}`)
+      assert.doesNotMatch(text.trimEnd(), /[.!?]$/, `starter looks complete: ${text}`)
+    }
+  }
 })
 
 test('no em dashes anywhere in the UI copy', () => {
