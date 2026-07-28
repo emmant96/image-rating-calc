@@ -215,27 +215,66 @@
           .map((k) => AXIS_PHRASE[k])
       }
 
-      /** Longest core+tail pair inside the window, else the closest that fits under it. */
-      function pickStarter(cores, tails) {
+      /**
+       * All valid phrasings for this result: inside the length window, and
+       * only ever asserting what the scores support.
+       *
+       * A pool rather than one sentence, because a single fixed phrasing means
+       * every tasker submits an identically shaped opener, which is exactly the
+       * templated look the rating guidelines penalise.
+       */
+      function starterVariants(cores, tails) {
+        const seen = {}
         const all = []
-        cores.forEach((c) => tails.forEach((t) => all.push(c + t)))
+        cores.forEach((c) =>
+          tails.forEach((t) => {
+            // Different axis widths collapse to the same sentence when a side
+            // won fewer axes than the width asked for. Deduplicate, or the
+            // random pick is biased towards whichever phrasing repeated most.
+            const s = c + t
+            if (seen[s]) return
+            seen[s] = true
+            all.push(s)
+          })
+        )
         const fits = all.filter((s) => s.length >= STARTER_MIN && s.length <= STARTER_MAX)
-        if (fits.length) return fits.sort((a, b) => b.length - a.length)[0]
+        if (fits.length) return fits.sort((a, b) => b.length - a.length)
+        // No phrasing lands in the window, so fall back to the closest that fits
+        // under the cap. Correctness is never traded for length.
         const under = all.filter((s) => s.length <= STARTER_MAX)
-        if (under.length) return under.sort((a, b) => b.length - a.length)[0]
-        return all.sort((a, b) => a.length - b.length)[0]
+        if (under.length) return under.sort((a, b) => b.length - a.length)
+        return all.sort((a, b) => a.length - b.length)
       }
 
-      function buildStarter(scores, result) {
-        if (!result) return null
+      const STARTER_TAILS = (W) => [
+        ' The difference is clearest in Image ' + W + ', where ',
+        ' This is most visible in Image ' + W + ', where ',
+        ' Specifically, in Image ' + W + ' ',
+        ' Looking closely, ',
+        ' Zooming in, ',
+        ' In detail, ',
+        ' Most visibly, ',
+      ]
+
+      /** Every phrasing available for these scores, longest first. */
+      function buildStarterVariants(scores, result) {
+        if (!result) return []
 
         if (result.verdict.side === 'T') {
-          return pickStarter(
+          return starterVariants(
             [
               'Neither image is clearly preferred. The two are evenly matched across the scored dimensions, and instruction following does not separate them either.',
+              'This is a genuine tie. The two responses match across the scored dimensions, and instruction following does not break it either.',
+              'Neither response is stronger overall. The scored dimensions balance out, and instruction following does not separate them.',
               'Neither image is clearly preferred. The two are evenly matched across the scored dimensions.',
             ],
-            [' The closest thing to a deciding detail is ', ' The deciding details are ', ' Looking closely, ']
+            [
+              ' The closest thing to a deciding detail is ',
+              ' The deciding details are ',
+              ' Looking closely, ',
+              ' Zooming in, ',
+              ' In detail, ',
+            ]
           )
         }
 
@@ -247,38 +286,70 @@
         const lose = (n) => phraseList(axesWonBy(scores, L, n))
 
         const cores = []
+        const widths = [3, 2, 1]
 
         if (split) {
-          // Instruction Following decided it, so lead with that reason.
+          // Instruction Following decided it, so every phrasing here says so.
           cores.push(
             'Image ' + W + ' is preferred over Image ' + L + ' because the two split evenly across the scored dimensions and ' + W + ' follows the prompt more closely.',
+            'The two responses split evenly across the scored dimensions, so instruction following decides it, and that goes to Image ' + W + '.',
+            'Image ' + W + ' is preferred on the tiebreak: the dimensions split evenly, and ' + W + ' follows the prompt more closely.',
+            'Image ' + W + ' takes it on instruction following. The two are level across the other scored dimensions.',
             'Image ' + W + ' is preferred over Image ' + L + ' because the dimensions split evenly and ' + W + ' follows the prompt more closely.'
           )
         }
 
         if (loserWon) {
-          // The losing side won something, so every phrasing here must say so.
-          cores.push(
-            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(3) + '. ' + L + ' is stronger on ' + lose(2) + ', but that does not offset the difference.',
-            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(2) + '. ' + L + ' is stronger on ' + lose(2) + ', but that does not offset it.',
-            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(2) + ', while ' + L + ' is only stronger on ' + lose(1) + '.',
-            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(1) + ', while ' + L + ' is only stronger on ' + lose(1) + '.'
-          )
+          // The losing side won something, so no phrasing may imply a sweep.
+          widths.forEach((n) => {
+            cores.push(
+              'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + '. ' + L + ' is stronger on ' + lose(2) + ', but that does not offset the difference.',
+              'Image ' + W + ' is the stronger response, taking ' + win(n) + '. ' + L + ' holds an advantage on ' + lose(2) + ', though not enough to change the call.',
+              'Image ' + W + ' comes out ahead on ' + win(n) + '. ' + L + ' does better on ' + lose(2) + ', but that is the smaller issue here.',
+              'Image ' + W + ' is preferred, winning ' + win(n) + '. The advantage ' + L + ' holds on ' + lose(1) + ' does not outweigh that.',
+              'On balance Image ' + W + ' is preferred: it wins ' + win(n) + ', while ' + L + ' only takes ' + lose(1) + '.',
+              'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + ', while ' + L + ' is only stronger on ' + lose(1) + '.'
+            )
+          })
         } else {
-          // Only claim a clean sweep when the other side genuinely won nothing.
-          cores.push(
-            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(3) + ' while ' + L + ' does not win any dimension outright.',
-            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(2) + ' while ' + L + ' does not win any dimension outright.',
-            'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(1) + ' and ' + L + ' does not win any dimension outright.'
-          )
+          // Only claim a sweep when the other side genuinely won nothing.
+          widths.forEach((n) => {
+            cores.push(
+              'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + ' while ' + L + ' does not win any dimension outright.',
+              'Image ' + W + ' is the stronger response throughout, taking ' + win(n) + ' without ' + L + ' winning a single dimension.',
+              'Image ' + W + ' is preferred, leading on ' + win(n) + '. Image ' + L + ' does not take any dimension outright.',
+              'Image ' + W + ' wins on ' + win(n) + ', and Image ' + L + ' does not come out ahead anywhere.',
+              'Every dimension that separates the two favours Image ' + W + ', which leads on ' + win(n) + '.',
+              // Longer forms, so a win on a single short-named axis still has
+              // several phrasings that reach the minimum length.
+              'Image ' + W + ' is preferred over Image ' + L + ' because it clearly leads on ' + win(n) + ', and Image ' + L + ' does not win any of the remaining dimensions outright.',
+              'Image ' + W + ' is preferred over Image ' + L + '. It takes ' + win(n) + ', the remaining scored dimensions are level, and Image ' + L + ' does not win anywhere.',
+              'The two responses are close on most of the scored dimensions, but Image ' + W + ' leads on ' + win(n) + ' and Image ' + L + ' does not win any dimension outright.',
+              'Image ' + W + ' is preferred over Image ' + L + ' because it is the only response to win a scored dimension outright, coming out ahead on ' + win(n) + '.'
+            )
+          })
         }
 
-        return pickStarter(cores, [
-          ' The difference is clearest in Image ' + W + ', where ',
-          ' This is most visible in Image ' + W + ', where ',
-          ' Specifically, in Image ' + W + ' ',
-          ' Looking closely, ',
-        ])
+        return starterVariants(cores, STARTER_TAILS(W))
+      }
+
+      /** Stable per score set, varied per seed. */
+      function hashScores(scores) {
+        const s = AXIS_ORDER.map((k) => (scores[k] === undefined ? 'x' : scores[k])).join(',')
+        let h = 0
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+        return Math.abs(h)
+      }
+
+      /**
+       * Pick one phrasing. Deterministic for a given score set and seed, so the
+       * text does not flicker between renders, but a new seed rewords it.
+       */
+      function buildStarter(scores, result, seed) {
+        const variants = buildStarterVariants(scores, result)
+        if (!variants.length) return null
+        const offset = hashScores(scores) + (seed || 0)
+        return variants[offset % variants.length]
       }
 
       /* ---8<--- SCORING END */
@@ -430,7 +501,7 @@
         )
       }
 
-      function FeedbackStarter({ text }) {
+      function FeedbackStarter({ text, onReword }) {
         // 'idle' | 'copied' | 'manual'. 'manual' means both copy paths were
         // refused, so the text is selected and the user finishes with Ctrl+C.
         const [status, setStatus] = useState('idle')
@@ -529,6 +600,13 @@
               {copied ? 'Copied' : status === 'manual' ? 'Selected, press Ctrl+C' : 'Copy starter'}
             </button>
 
+            <button
+              onClick={onReword}
+              className="mt-2 w-full rounded-xl border border-slate-800 px-4 py-2 text-xs font-medium text-slate-400 transition hover:border-slate-600 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            >
+              Reword it
+            </button>
+
             <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
               Finish the sentence with what you actually saw, and where. Name the
               specific tell rather than saying one looks better.
@@ -563,7 +641,10 @@
 
         const filled = task ? task.axes.filter((k) => scores[k] !== undefined).length : 0
         const result = useMemo(() => (task ? computeResult(task.id, scores) : null), [task, scores])
-        const starter = useMemo(() => buildStarter(scores, result), [scores, result])
+        // Random at page load, so two taskers on the same scores do not open
+        // with the same sentence. Reshuffle bumps it on demand.
+        const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
+        const starter = useMemo(() => buildStarter(scores, result, seed), [scores, result, seed])
 
         // Keyboard shortcuts: 1 to 5 scores the next unfilled axis, Backspace undoes the last one.
         useEffect(() => {
@@ -643,7 +724,12 @@
 
                   <aside className="lg:sticky lg:top-8">
                     <ResultCard result={result} filled={filled} total={task.axes.length} />
-                    {starter && <FeedbackStarter text={starter} />}
+                    {starter && (
+                      <FeedbackStarter
+                        text={starter}
+                        onReword={() => setSeed((s) => s + 1)}
+                      />
+                    )}
                     <button
                       onClick={() => setScores({})}
                       className="mt-3 w-full rounded-xl border border-slate-800 px-4 py-2.5 text-sm font-medium text-slate-400 transition hover:border-slate-600 hover:text-slate-200"

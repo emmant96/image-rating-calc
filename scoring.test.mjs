@@ -17,10 +17,12 @@ function loadEngine() {
   const start = html.indexOf('*/', startMarker) + 2
   const end = html.lastIndexOf('/*', endMarker)
   const source = html.slice(start, end)
-  return new Function(source + '\n return { computeResult, TASKS, buildStarter }')()
+  return new Function(
+    source + '\n return { computeResult, TASKS, buildStarter, buildStarterVariants }'
+  )()
 }
 
-const { computeResult, TASKS, buildStarter } = loadEngine()
+const { computeResult, TASKS, buildStarter, buildStarterVariants } = loadEngine()
 
 const r2i = ([instruction, personId, refPreservation, visualQuality, artifacts]) =>
   computeResult('r2i', { instruction, personId, refPreservation, visualQuality, artifacts })
@@ -107,62 +109,87 @@ test('starter is null until every axis is scored', () => {
   assert.equal(buildStarter({ instruction: 2 }, computeResult('r2i', { instruction: 2 })), null)
 })
 
-test('starter stays within 150 to 200 characters for every combination', () => {
-  for (const taskId of ['r2i', 't2i']) {
-    for (const scores of allCombos(taskId)) {
-      const text = buildStarter(scores, computeResult(taskId, scores))
-      assert.ok(
-        text.length >= 150 && text.length <= 200,
-        `${taskId} ${JSON.stringify(scores)} produced ${text.length} chars: ${text}`
-      )
-    }
-  }
-})
-
-test('starter never claims a clean sweep when the losing side won an axis', () => {
+/** Any phrasing in the pool can be shown, so all of them must hold up. */
+function eachVariant(fn) {
   for (const taskId of ['r2i', 't2i']) {
     for (const scores of allCombos(taskId)) {
       const result = computeResult(taskId, scores)
-      const text = buildStarter(scores, result)
-      if (!/does not win any dimension outright/.test(text)) continue
-      const loserWins = result.verdict.side === 'A' ? result.winsB : result.winsA
-      assert.equal(
-        loserWins,
-        0,
-        `false sweep claim for ${taskId} ${JSON.stringify(scores)}: ${text}`
-      )
-    }
-  }
-})
-
-test('starter names the side the engine actually picked', () => {
-  for (const taskId of ['r2i', 't2i']) {
-    for (const scores of allCombos(taskId)) {
-      const result = computeResult(taskId, scores)
-      const text = buildStarter(scores, result)
-      if (result.verdict.side === 'T') {
-        assert.match(text, /^Neither image is clearly preferred/)
-      } else {
-        const loser = result.verdict.side === 'A' ? 'B' : 'A'
-        assert.ok(
-          text.startsWith(`Image ${result.verdict.side} is preferred over Image ${loser}`),
-          `starter disagrees with verdict ${result.verdict.label}: ${text}`
-        )
+      for (const text of buildStarterVariants(scores, result)) {
+        fn(text, result, scores, taskId)
       }
     }
   }
+}
+
+test('every phrasing stays within 150 to 200 characters', () => {
+  eachVariant((text, _r, scores, taskId) => {
+    assert.ok(
+      text.length >= 150 && text.length <= 200,
+      `${taskId} ${JSON.stringify(scores)} produced ${text.length} chars: ${text}`
+    )
+  })
 })
 
-test('starter ends mid-sentence so it cannot pass as finished feedback', () => {
+test('no phrasing claims a sweep when the losing side won an axis', () => {
+  const SWEEP =
+    /does not win any dimension outright|does not take any dimension|does not come out ahead anywhere|Every dimension that separates|not win any of the remaining dimensions|only response to win a scored dimension|does not win anywhere/
+  eachVariant((text, result, scores, taskId) => {
+    if (!SWEEP.test(text)) return
+    const loserWins = result.verdict.side === 'A' ? result.winsB : result.winsA
+    assert.equal(loserWins, 0, `false sweep for ${taskId} ${JSON.stringify(scores)}: ${text}`)
+  })
+})
+
+test('every phrasing names the side the engine actually picked', () => {
+  eachVariant((text, result) => {
+    if (result.verdict.side === 'T') {
+      assert.doesNotMatch(text, /is preferred over Image/, `tie text picks a winner: ${text}`)
+      return
+    }
+    const W = result.verdict.side
+    const L = W === 'A' ? 'B' : 'A'
+    assert.ok(
+      text.includes('Image ' + W),
+      `phrasing never names the winner ${W}: ${text}`
+    )
+    // The losing side must never be the one described as preferred.
+    assert.doesNotMatch(
+      text,
+      new RegExp('Image ' + L + ' is (preferred|the stronger)'),
+      `phrasing names the loser as preferred: ${text}`
+    )
+  })
+})
+
+test('every phrasing ends mid-sentence so it cannot pass as finished feedback', () => {
+  eachVariant((text) => {
+    assert.ok(text.endsWith(' '), `starter should trail a space: ${text}`)
+    assert.doesNotMatch(text.trimEnd(), /[.!?]$/, `starter looks complete: ${text}`)
+  })
+})
+
+test('every score set offers several different phrasings', () => {
+  let min = Infinity
   for (const taskId of ['r2i', 't2i']) {
     for (const scores of allCombos(taskId)) {
-      const text = buildStarter(scores, computeResult(taskId, scores))
-      // A trailing space with no closing punctuation reads as unfinished,
-      // which is what discourages submitting the starter as the whole answer.
-      assert.ok(text.endsWith(' '), `starter should trail a space: ${text}`)
-      assert.doesNotMatch(text.trimEnd(), /[.!?]$/, `starter looks complete: ${text}`)
+      const variants = buildStarterVariants(scores, computeResult(taskId, scores))
+      const unique = new Set(variants)
+      assert.equal(unique.size, variants.length, `duplicate phrasings for ${JSON.stringify(scores)}`)
+      min = Math.min(min, unique.size)
     }
   }
+  // Guards the point of the pool: identical openers across taskers is the
+  // templated look the rating guidelines penalise.
+  assert.ok(min >= 5, `some score set offers only ${min} phrasings`)
+})
+
+test('rewording changes the text and cycles back around', () => {
+  const scores = { instruction: 2, personId: 1, refPreservation: 0, visualQuality: -1, artifacts: -1 }
+  const result = computeResult('r2i', scores)
+  const total = buildStarterVariants(scores, result).length
+  const seen = new Set()
+  for (let seed = 0; seed < total; seed++) seen.add(buildStarter(scores, result, seed))
+  assert.equal(seen.size, total, 'seeding should reach every phrasing exactly once')
 })
 
 test('no em dashes anywhere in the UI copy', () => {
