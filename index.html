@@ -246,23 +246,41 @@
         return all.sort((a, b) => a.length - b.length)
       }
 
-      const STARTER_TAILS = (W) => [
-        ' The difference is clearest in Image ' + W + ', where ',
-        ' This is most visible in Image ' + W + ', where ',
-        ' Specifically, in Image ' + W + ' ',
-        ' Looking closely, ',
-        ' Zooming in, ',
-        ' In detail, ',
-        ' Most visibly, ',
-      ]
+      const STARTER_TAILS = {
+        neutral: (W) => [
+          ' The difference is clearest in Image ' + W + ', where ',
+          ' This is most visible in Image ' + W + ', where ',
+          ' Specifically, in Image ' + W + ' ',
+          ' Looking closely, ',
+          ' Zooming in, ',
+          ' In detail, ',
+          ' Most visibly, ',
+        ],
+        conversational: (W) => [
+          ' Looking closely, ',
+          ' If you zoom in, ',
+          ' What stands out is that ',
+          ' The clearest example is in Image ' + W + ', where ',
+          ' You can see it best in Image ' + W + ', where ',
+          ' The giveaway is that ',
+        ],
+      }
+
 
       /** Every phrasing available for these scores, longest first. */
-      function buildStarterVariants(scores, result) {
+      function buildStarterVariants(scores, result, tone) {
         if (!result) return []
+        const casual = tone === 'conversational'
 
         if (result.verdict.side === 'T') {
           return starterVariants(
-            [
+            casual
+              ? [
+                  'I could not call a winner here. The two are evenly matched across the scored dimensions, and instruction following does not separate them either.',
+                  'This one is a genuine tie for me. The two responses match across the scored dimensions, and instruction following does not break it.',
+                  'I do not think either response is stronger. The dimensions balance out, and instruction following does not separate them either.',
+                ]
+              : [
               'Neither image is clearly preferred. The two are evenly matched across the scored dimensions, and instruction following does not separate them either.',
               'This is a genuine tie. The two responses match across the scored dimensions, and instruction following does not break it either.',
               'Neither response is stronger overall. The scored dimensions balance out, and instruction following does not separate them.',
@@ -290,6 +308,14 @@
 
         if (split) {
           // Instruction Following decided it, so every phrasing here says so.
+          if (casual) {
+            cores.push(
+              'I am going with Image ' + W + ' here. The two split evenly across the scored dimensions, so it comes down to which one follows the prompt, and that is ' + W + '.',
+              'Image ' + W + ' takes this one for me. The dimensions split evenly, so instruction following decides it, and ' + W + ' handles the prompt better.',
+              'This one came down to the tiebreak. The two split evenly across the dimensions, and Image ' + W + ' follows the prompt more closely.',
+              'I would give this to Image ' + W + '. The scored dimensions come out even, so instruction following decides, and that goes to ' + W + '.'
+            )
+          }
           cores.push(
             'Image ' + W + ' is preferred over Image ' + L + ' because the two split evenly across the scored dimensions and ' + W + ' follows the prompt more closely.',
             'The two responses split evenly across the scored dimensions, so instruction following decides it, and that goes to Image ' + W + '.',
@@ -302,6 +328,14 @@
         if (loserWon) {
           // The losing side won something, so no phrasing may imply a sweep.
           widths.forEach((n) => {
+            if (casual) {
+              cores.push(
+                'I would go with Image ' + W + ' here. It handles ' + win(n) + ' better, and while ' + L + ' is stronger on ' + lose(2) + ', that is not enough to change my call.',
+                'Image ' + W + ' gets my vote. It does better on ' + win(n) + '. ' + L + ' has the edge on ' + lose(2) + ', but not enough to flip it for me.',
+                'I am going with Image ' + W + ' on this one. It wins ' + win(n) + ', and the ground ' + L + ' makes up on ' + lose(2) + ' does not outweigh that.',
+                'Image ' + W + ' is the one I would pick. It takes ' + win(n) + ', and although ' + L + ' is better on ' + lose(1) + ', that does not change the outcome.'
+              )
+            }
             cores.push(
               'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + '. ' + L + ' is stronger on ' + lose(2) + ', but that does not offset the difference.',
               'Image ' + W + ' is the stronger response, taking ' + win(n) + '. ' + L + ' holds an advantage on ' + lose(2) + ', though not enough to change the call.',
@@ -314,6 +348,14 @@
         } else {
           // Only claim a sweep when the other side genuinely won nothing.
           widths.forEach((n) => {
+            if (casual) {
+              cores.push(
+                'I would take Image ' + W + ' here without much hesitation. It leads on ' + win(n) + ', and Image ' + L + ' does not win a single dimension outright.',
+                'Image ' + W + ' is the clear pick for me. It comes out ahead on ' + win(n) + ', and I could not find a dimension where ' + L + ' wins.',
+                'This one was straightforward. Image ' + W + ' leads on ' + win(n) + ', and Image ' + L + ' does not come out ahead anywhere I looked.',
+                'I am going with Image ' + W + '. It takes ' + win(n) + ', and there is no dimension where Image ' + L + ' wins outright.'
+              )
+            }
             cores.push(
               'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + ' while ' + L + ' does not win any dimension outright.',
               'Image ' + W + ' is the stronger response throughout, taking ' + win(n) + ' without ' + L + ' winning a single dimension.',
@@ -330,7 +372,7 @@
           })
         }
 
-        return starterVariants(cores, STARTER_TAILS(W))
+        return starterVariants(cores, STARTER_TAILS[casual ? 'conversational' : 'neutral'](W))
       }
 
       /** Stable per score set, varied per seed. */
@@ -345,8 +387,8 @@
        * Pick one phrasing. Deterministic for a given score set and seed, so the
        * text does not flicker between renders, but a new seed rewords it.
        */
-      function buildStarter(scores, result, seed) {
-        const variants = buildStarterVariants(scores, result)
+      function buildStarter(scores, result, seed, tone) {
+        const variants = buildStarterVariants(scores, result, tone)
         if (!variants.length) return null
         const offset = hashScores(scores) + (seed || 0)
         return variants[offset % variants.length]
@@ -501,7 +543,7 @@
         )
       }
 
-      function FeedbackStarter({ text, onReword }) {
+      function FeedbackStarter({ text, onReword, tone, onTone }) {
         // 'idle' | 'copied' | 'manual'. 'manual' means both copy paths were
         // refused, so the text is selected and the user finishes with Ctrl+C.
         const [status, setStatus] = useState('idle')
@@ -578,6 +620,28 @@
               </span>
             </div>
 
+            <div role="radiogroup" aria-label="Feedback tone" className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-slate-950/60 p-1">
+              {[
+                { id: 'neutral', label: 'Neutral' },
+                { id: 'conversational', label: 'Conversational' },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  role="radio"
+                  aria-checked={tone === opt.id}
+                  onClick={() => onTone(opt.id)}
+                  className={cx(
+                    'rounded-lg px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                    tone === opt.id
+                      ? 'bg-slate-800 text-slate-100'
+                      : 'text-slate-500 hover:text-slate-300'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             <p
               ref={textRef}
               className="mt-3 rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-300 selection:bg-indigo-500/40"
@@ -644,7 +708,30 @@
         // Random at page load, so two taskers on the same scores do not open
         // with the same sentence. Reshuffle bumps it on demand.
         const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
-        const starter = useMemo(() => buildStarter(scores, result, seed), [scores, result, seed])
+
+        // Remembered across sessions: this gets picked once and then used all day.
+        const [tone, setTone] = useState(() => {
+          try {
+            return localStorage.getItem('hedgehog.tone') || 'neutral'
+          } catch (err) {
+            return 'neutral'
+          }
+        })
+
+        const chooseTone = (next) => {
+          setTone(next)
+          try {
+            localStorage.setItem('hedgehog.tone', next)
+          } catch (err) {
+            // Private browsing can refuse storage. The toggle still works for
+            // this session, it just will not be remembered.
+          }
+        }
+
+        const starter = useMemo(
+          () => buildStarter(scores, result, seed, tone),
+          [scores, result, seed, tone]
+        )
 
         // Keyboard shortcuts: 1 to 5 scores the next unfilled axis, Backspace undoes the last one.
         useEffect(() => {
@@ -728,6 +815,8 @@
                       <FeedbackStarter
                         text={starter}
                         onReword={() => setSeed((s) => s + 1)}
+                        tone={tone}
+                        onTone={chooseTone}
                       />
                     )}
                     <button
