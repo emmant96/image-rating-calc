@@ -110,16 +110,12 @@ test('starter is null until every axis is scored', () => {
 })
 
 /** Any phrasing in the pool can be shown, so all of them must hold up. */
-const TONES = ['neutral', 'conversational']
-
 function eachVariant(fn) {
-  for (const tone of TONES) {
-    for (const taskId of ['r2i', 't2i']) {
-      for (const scores of allCombos(taskId)) {
-        const result = computeResult(taskId, scores)
-        for (const text of buildStarterVariants(scores, result, tone)) {
-          fn(text, result, scores, taskId, tone)
-        }
+  for (const taskId of ['r2i', 't2i']) {
+    for (const scores of allCombos(taskId)) {
+      const result = computeResult(taskId, scores)
+      for (const text of buildStarterVariants(scores, result)) {
+        fn(text, result, scores, taskId)
       }
     }
   }
@@ -172,16 +168,14 @@ test('every phrasing ends mid-sentence so it cannot pass as finished feedback', 
   })
 })
 
-test('every score set offers several different phrasings in both tones', () => {
+test('every score set offers several different phrasings', () => {
   let min = Infinity
-  for (const tone of TONES) {
-    for (const taskId of ['r2i', 't2i']) {
+  for (const taskId of ['r2i', 't2i']) {
     for (const scores of allCombos(taskId)) {
-      const variants = buildStarterVariants(scores, computeResult(taskId, scores), tone)
+      const variants = buildStarterVariants(scores, computeResult(taskId, scores))
       const unique = new Set(variants)
       assert.equal(unique.size, variants.length, `duplicate phrasings for ${JSON.stringify(scores)}`)
       min = Math.min(min, unique.size)
-    }
     }
   }
   // Guards the point of the pool: identical openers across taskers is the
@@ -192,32 +186,10 @@ test('every score set offers several different phrasings in both tones', () => {
 test('rewording changes the text and cycles back around', () => {
   const scores = { instruction: 2, personId: 1, refPreservation: 0, visualQuality: -1, artifacts: -1 }
   const result = computeResult('r2i', scores)
-  for (const tone of TONES) {
-    const total = buildStarterVariants(scores, result, tone).length
-    const seen = new Set()
-    for (let seed = 0; seed < total; seed++) seen.add(buildStarter(scores, result, seed, tone))
-    assert.equal(seen.size, total, `seeding should reach every ${tone} phrasing exactly once`)
-  }
-})
-
-test('the two tones produce genuinely different wording', () => {
-  const scores = { instruction: 2, personId: 1, refPreservation: 0, visualQuality: -1, artifacts: -1 }
-  const result = computeResult('r2i', scores)
-  const neutral = new Set(buildStarterVariants(scores, result, 'neutral'))
-  const casual = new Set(buildStarterVariants(scores, result, 'conversational'))
-  const shared = [...casual].filter((s) => neutral.has(s))
-  assert.ok(casual.size > 0 && neutral.size > 0)
-  assert.ok(
-    shared.length < Math.min(casual.size, neutral.size) / 2,
-    'tones overlap too heavily to be distinguishable'
-  )
-})
-
-test('an unknown tone falls back to neutral rather than emitting nothing', () => {
-  const scores = { instruction: 2, personId: 1, refPreservation: 0, visualQuality: -1, artifacts: -1 }
-  const result = computeResult('r2i', scores)
-  const fallback = buildStarterVariants(scores, result, 'nonsense')
-  assert.deepEqual(fallback, buildStarterVariants(scores, result, 'neutral'))
+  const total = buildStarterVariants(scores, result).length
+  const seen = new Set()
+  for (let seed = 0; seed < total; seed++) seen.add(buildStarter(scores, result, seed))
+  assert.equal(seen.size, total, 'seeding should reach every phrasing exactly once')
 })
 
 test('no em dashes anywhere in the UI copy', () => {
