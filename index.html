@@ -679,6 +679,13 @@
                     <p className="text-xs tracking-wide text-slate-500">Decision Calculator</p>
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                <a
+                  href="./training.html"
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                >
+                  Training
+                </a>
                 {task && (
                   <button
                     onClick={reset}
@@ -687,6 +694,7 @@
                     &larr; Back to Task Selection
                   </button>
                 )}
+                </div>
               </header>
 
               {!task ? (

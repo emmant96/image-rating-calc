@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Training results</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+      Babel.registerPreset('react-classic', {
+        presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]],
+      })
+    </script>
+    <style>
+      #root:empty::after {
+        content: 'Loading...';
+        display: block;
+        padding: 3rem;
+        text-align: center;
+        color: #64748b;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-950">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react-classic">
+      const { useMemo, useState } = React
+
+      /* ---8<--- META START
+       * Mirrors the lessons in training.html. The result code stores per lesson
+       * seconds positionally, so the order here must match the order there.
+       * A test asserts the two files agree.
+       */
+      const LESSON_META = [
+        { id: 'seeing', title: 'Looking before judging', questions: 2 },
+        { id: 'quality', title: 'Visual quality', questions: 3 },
+        { id: 'artifacts', title: 'AI artifacts', questions: 3 },
+        { id: 'severity', title: 'Sizing your vote', questions: 4 },
+        { id: 'overall', title: 'Reaching an overall call', questions: 3 },
+      ]
+      /* ---8<--- META END */
+
+      function decodeResult(raw) {
+        const line = raw.trim()
+        if (!line) return null
+        if (!line.startsWith('HEDGE1.')) return { error: 'Not a result code', raw: line }
+        try {
+          let b64 = line.slice('HEDGE1.'.length).replace(/-/g, '+').replace(/_/g, '/')
+          while (b64.length % 4) b64 += '='
+          const obj = JSON.parse(decodeURIComponent(escape(atob(b64))))
+          if (typeof obj.n !== 'string' || typeof obj.s !== 'number') {
+            return { error: 'Code is missing a name or score', raw: line }
+          }
+          return obj
+        } catch (err) {
+          return { error: 'Could not read this code', raw: line }
+        }
+      }
+
+      const fmt = (secs) => {
+        const s = Math.max(0, Math.round(secs || 0))
+        return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
+      }
+
+      const cx = (...c) => c.filter(Boolean).join(' ')
+
+      function App() {
+        const [text, setText] = useState(() => {
+          try {
+            return localStorage.getItem('hedgehog.results') || ''
+          } catch (err) {
+            return ''
+          }
+        })
+
+        const save = (v) => {
+          setText(v)
+          try {
+            localStorage.setItem('hedgehog.results', v)
+          } catch (err) {
+            /* private browsing refuses storage; the table still works */
+          }
+        }
+
+        const { rows, errors } = useMemo(() => {
+          const rows = []
+          const errors = []
+          text.split(/[\r\n]+/).forEach((line) => {
+            const r = decodeResult(line)
+            if (!r) return
+            if (r.error) {
+              errors.push(r)
+              return
+            }
+            const total = (r.secs || []).reduce((a, b) => a + b, 0)
+            rows.push({ ...r, total })
+          })
+          // Highest score first, then fastest among equal scores.
+          rows.sort((a, b) => b.s - a.s || a.total - b.total)
+          return { rows, errors }
+        }, [text])
+
+        const best = rows.length ? rows[0] : null
+
+        // Best attempt per person, so a retake does not crowd the leaderboard.
+        const perPerson = useMemo(() => {
+          const map = new Map()
+          rows.forEach((r) => {
+            const prev = map.get(r.n)
+            if (!prev || r.s > prev.s || (r.s === prev.s && r.total < prev.total)) map.set(r.n, r)
+          })
+          return [...map.values()].sort((a, b) => b.s - a.s || a.total - b.total)
+        }, [rows])
+
+        const avgPerLesson = useMemo(() => {
+          if (!rows.length) return null
+          return LESSON_META.map((_, i) => {
+            const vals = rows.map((r) => (r.secs || [])[i] || 0)
+            return vals.reduce((a, b) => a + b, 0) / vals.length
+          })
+        }, [rows])
+
+        return (
+          <div className="min-h-screen bg-slate-950 text-slate-200 antialiased">
+            <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+              <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-50">Training results</h1>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Paste the codes your team sends you, one per line.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <a href="./training.html" className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-100">Training</a>
+                  <a href="./index.html" className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-100">Calculator</a>
+                </div>
+              </header>
+
+              <textarea
+                value={text}
+                onChange={(e) => save(e.target.value)}
+                spellCheck={false}
+                placeholder={'HEDGE1.eyJ2IjoxLCJuIjoiRGVib3JhaCIsInMiOjEyLCJ0IjoxNSwuLi59\nHEDGE1....'}
+                className="h-36 w-full rounded-2xl border border-slate-800 bg-slate-900/60 p-4 font-mono text-xs text-slate-300 outline-none transition focus:border-indigo-500"
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                <span>
+                  {rows.length} result{rows.length === 1 ? '' : 's'} read
+                  {errors.length > 0 && (
+                    <span className="text-amber-400"> &middot; {errors.length} line(s) not understood</span>
+                  )}
+                </span>
+                <button
+                  onClick={() => save('')}
+                  className="rounded-lg border border-slate-800 px-3 py-1.5 text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+                >
+                  Clear
+                </button>
+              </div>
+
+              {best && (
+                <div className="mt-6 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-6">
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                    Top score
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-baseline gap-4">
+                    <span className="text-3xl font-bold text-emerald-300">{best.n}</span>
+                    <span className="rounded-lg bg-emerald-500 px-3 py-1 text-lg font-bold text-emerald-950">
+                      {best.s} / {best.t}
+                    </span>
+                    <span className="text-sm text-slate-400">
+                      {Math.round((best.s / best.t) * 100)}% in {fmt(best.total)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {perPerson.length > 0 && (
+                <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-800">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="bg-slate-900/80 text-xs uppercase tracking-wider text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">#</th>
+                        <th className="px-4 py-3">Name</th>
+                        <th className="px-4 py-3">Score</th>
+                        <th className="px-4 py-3">%</th>
+                        <th className="px-4 py-3">Total time</th>
+                        {LESSON_META.map((l, i) => (
+                          <th key={l.id} className="px-3 py-3 text-center" title={l.title}>
+                            L{i + 1}
+                          </th>
+                        ))}
+                        <th className="px-4 py-3">Taken</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {perPerson.map((r, i) => {
+                        const pct = Math.round((r.s / r.t) * 100)
+                        return (
+                          <tr
+                            key={r.n + r.d}
+                            className={cx(
+                              'border-t border-slate-800',
+                              i === 0 ? 'bg-emerald-500/5' : 'odd:bg-slate-900/40'
+                            )}
+                          >
+                            <td className="px-4 py-3 text-slate-500">{i + 1}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-100">{r.n}</td>
+                            <td className="px-4 py-3 text-slate-200">
+                              {r.s} / {r.t}
+                            </td>
+                            <td
+                              className={cx(
+                                'px-4 py-3 font-semibold',
+                                pct >= 80 ? 'text-emerald-400' : pct >= 60 ? 'text-amber-400' : 'text-rose-400'
+                              )}
+                            >
+                              {pct}%
+                            </td>
+                            <td className="px-4 py-3 text-slate-300">{fmt(r.total)}</td>
+                            {LESSON_META.map((l, j) => (
+                              <td key={l.id} className="px-3 py-3 text-center text-xs text-slate-400">
+                                {fmt((r.secs || [])[j])}
+                              </td>
+                            ))}
+                            <td className="px-4 py-3 text-xs text-slate-500">
+                              {(r.d || '').replace('T', ' ')}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    {avgPerLesson && (
+                      <tfoot>
+                        <tr className="border-t border-slate-700 bg-slate-900/70 text-xs text-slate-400">
+                          <td className="px-4 py-3" colSpan={5}>
+                            Average time per lesson
+                          </td>
+                          {avgPerLesson.map((s, i) => (
+                            <td key={i} className="px-3 py-3 text-center">
+                              {fmt(s)}
+                            </td>
+                          ))}
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              )}
+
+              {perPerson.length > 0 && (
+                <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                  L1 to L5 are the lessons in order: {LESSON_META.map((l) => l.title).join(', ')}.
+                  Only each person's best attempt is listed. Where scores tie, the faster time ranks higher.
+                </p>
+              )}
+
+              {errors.length > 0 && (
+                <div className="mt-6 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4">
+                  <div className="text-sm font-semibold text-amber-300">
+                    {errors.length} line(s) could not be read
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {errors.slice(0, 5).map((e, i) => (
+                      <li key={i} className="break-all font-mono text-xs text-slate-400">
+                        {e.error}: {e.raw.slice(0, 60)}
+                        {e.raw.length > 60 ? '...' : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {rows.length === 0 && errors.length === 0 && (
+                <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/40 p-8 text-center">
+                  <p className="text-sm text-slate-400">
+                    Nothing pasted yet. When someone finishes the training they get a code
+                    starting with HEDGE1. Paste them here, one per line.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+    </script>
+  </body>
+</html>

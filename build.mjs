@@ -22,6 +22,10 @@ const tmp = join(root, '.build-tmp')
 
 const read = (...p) => readFileSync(join(...p), 'utf8')
 
+// Every page that gets compiled and shipped. Tailwind scans all of them so one
+// stylesheet covers the whole site.
+const PAGES = ['index.html', 'training.html', 'results.html']
+
 /** Pull the app source out of the single <script type="text/babel"> block. */
 function extractAppSource(html) {
   const open = html.indexOf('<script type="text/babel"')
@@ -48,31 +52,41 @@ function buildCss() {
   return read(output)
 }
 
-const html = read(root, 'index.html')
-
-// 1. JSX -> React.createElement, matching the runtime the dev file pins.
-const { code: app } = await transformAsync(extractAppSource(html), {
-  presets: [['@babel/preset-react', { runtime: 'classic' }]],
-  filename: 'app.jsx',
-  compact: false,
-  babelrc: false,
-  configFile: false,
-})
-
-// 2. Only the utilities the markup references.
+// Tailwind once, covering every page.
 const css = buildCss()
 
-// 3. React itself, so the page needs no network at all.
+// React itself, so the pages need no network at all.
 const react = read(root, 'node_modules/react/umd/react.production.min.js')
 const reactDom = read(root, 'node_modules/react-dom/umd/react-dom.production.min.js')
 
-const title = (html.match(/<title>([^<]*)<\/title>/) || [, 'Project Hedgehog Decision Calculator'])[1]
+rmSync(dist, { recursive: true, force: true })
+mkdirSync(dist, { recursive: true })
 
-const out = `<!doctype html>
+const kb = (n) => (n / 1024).toFixed(1) + ' kB'
+
+for (const page of PAGES) {
+  const html = read(root, page)
+
+  // JSX -> React.createElement, matching the runtime the dev files pin.
+  const { code: app } = await transformAsync(extractAppSource(html), {
+    presets: [['@babel/preset-react', { runtime: 'classic' }]],
+    filename: page.replace('.html', '.jsx'),
+    compact: false,
+    babelrc: false,
+    configFile: false,
+  })
+
+  const title = (html.match(/<title>([^<]*)<\/title>/) || [, 'Image Rating Calculator'])[1]
+  // Keep any robots directive the source page set, so the results dashboard
+  // and the training pages stay out of search results.
+  const robots = /<meta name="robots"[^>]*>/.exec(html)
+  const head = robots ? '\n    ' + robots[0] : ''
+
+  const out = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />${head}
     <title>${title}</title>
     <style>${css}</style>
   </head>
@@ -85,12 +99,11 @@ const out = `<!doctype html>
 </html>
 `
 
-rmSync(dist, { recursive: true, force: true })
-mkdirSync(dist, { recursive: true })
-writeFileSync(join(dist, 'index.html'), out)
+  writeFileSync(join(dist, page), out)
+  console.log(`built dist/${page.padEnd(14)} app ${kb(Buffer.byteLength(app)).padStart(9)}  total ${kb(Buffer.byteLength(out))}`)
+}
+
 // GitHub Pages runs Jekyll by default, which skips files it does not recognise.
 writeFileSync(join(dist, '.nojekyll'), '')
 rmSync(tmp, { recursive: true, force: true })
-
-const kb = (s) => (Buffer.byteLength(s) / 1024).toFixed(1) + ' kB'
-console.log(`built dist/index.html  (css ${kb(css)}, app ${kb(app)}, total ${kb(out)})`)
+console.log(`shared css ${kb(Buffer.byteLength(css))}`)

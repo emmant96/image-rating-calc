@@ -196,3 +196,109 @@ test('no em dashes anywhere in the UI copy', () => {
   const html = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8')
   assert.equal(html.includes('—'), false, 'found an em dash in index.html')
 })
+
+/* ---------------- training course ---------------- */
+
+function loadCourse() {
+  const html = fs.readFileSync(new URL('./training.html', import.meta.url), 'utf8')
+  const s = html.indexOf('---8<--- COURSE START')
+  const e = html.indexOf('---8<--- COURSE END')
+  assert.ok(s !== -1 && e !== -1, 'course markers not found in training.html')
+  const source = html.slice(html.indexOf('*/', s) + 2, html.lastIndexOf('/*', e))
+  return new Function(
+    source + '\n return { LESSONS, ALL_QUESTIONS, TEAM, estimateMinutes, scoreAnswers }'
+  )()
+}
+
+const course = loadCourse()
+
+test('every question has a valid answer index and an explanation', () => {
+  for (const q of course.ALL_QUESTIONS) {
+    assert.ok(q.options.length >= 2, `${q.id} needs at least two options`)
+    assert.ok(
+      Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length,
+      `${q.id} answer index ${q.answer} is outside its options`
+    )
+    assert.ok(q.why && q.why.length > 30, `${q.id} needs an explanation`)
+  }
+})
+
+test('question ids are unique', () => {
+  const ids = course.ALL_QUESTIONS.map((q) => q.id)
+  assert.equal(new Set(ids).size, ids.length, 'duplicate question id')
+})
+
+test('scoring counts only correct answers', () => {
+  const perfect = {}
+  course.ALL_QUESTIONS.forEach((q) => (perfect[q.id] = q.answer))
+  assert.equal(course.scoreAnswers(perfect), course.ALL_QUESTIONS.length)
+
+  const wrong = {}
+  course.ALL_QUESTIONS.forEach((q) => (wrong[q.id] = (q.answer + 1) % q.options.length))
+  assert.equal(course.scoreAnswers(wrong), 0)
+
+  assert.equal(course.scoreAnswers({}), 0, 'unanswered must not score')
+})
+
+test('read estimates are sane', () => {
+  for (const lesson of course.LESSONS) {
+    const m = course.estimateMinutes(lesson)
+    assert.ok(m >= 1 && m <= 15, `${lesson.id} estimated ${m} min, which looks wrong`)
+  }
+})
+
+test('the whole team is listed', () => {
+  assert.deepEqual(course.TEAM, ['Deborah', 'Radical', 'Keji', 'Enny', 'Daniel', 'Mimo', 'Onaope'])
+})
+
+test('results page lesson metadata matches the course', () => {
+  const html = fs.readFileSync(new URL('./results.html', import.meta.url), 'utf8')
+  const s = html.indexOf('---8<--- META START')
+  const e = html.indexOf('---8<--- META END')
+  assert.ok(s !== -1 && e !== -1, 'meta markers not found in results.html')
+  const source = html.slice(html.indexOf('*/', s) + 2, html.lastIndexOf('/*', e))
+  const { LESSON_META } = new Function(source + '\n return { LESSON_META }')()
+
+  // The result code stores per lesson seconds positionally, so any drift here
+  // would silently mislabel the columns on the dashboard.
+  assert.equal(LESSON_META.length, course.LESSONS.length, 'lesson count differs between pages')
+  LESSON_META.forEach((m, i) => {
+    assert.equal(m.id, course.LESSONS[i].id, `lesson ${i} id differs between pages`)
+    assert.equal(
+      m.questions,
+      course.LESSONS[i].questions.length,
+      `lesson ${m.id} question count differs between pages`
+    )
+  })
+})
+
+test('no em dashes in the training or results pages', () => {
+  for (const f of ['training.html', 'results.html']) {
+    const html = fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8')
+    assert.equal(html.includes('—'), false, `found an em dash in ${f}`)
+  }
+})
+
+test('no client owned branding is republished', () => {
+  // The course was rewritten precisely so none of this ends up on a public site.
+  for (const f of ['training.html', 'results.html']) {
+    const html = fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8')
+    for (const term of ['joinhandshake', 'hedgehog-faq', 'Handshake']) {
+      assert.equal(html.includes(term), false, `${f} leaks "${term}"`)
+    }
+  }
+})
+
+test('the correct answer is not always in the same position', () => {
+  const positions = course.ALL_QUESTIONS.map((q) => q.answer)
+  const spread = new Set(positions)
+  assert.ok(
+    spread.size >= 3,
+    `answers only ever appear at position(s) ${[...spread].join(', ')}, which is guessable`
+  )
+  const atZero = positions.filter((p) => p === 0).length
+  assert.ok(
+    atZero <= positions.length / 2,
+    `${atZero} of ${positions.length} answers sit at position 0`
+  )
+})
