@@ -10,7 +10,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script>
-      // Babel's stock "react" preset defaults to the automatic JSX runtime, which
+      // Babel's stock react preset defaults to the automatic JSX runtime, which
       // emits an import statement that cannot run in a plain script. Pin classic.
       Babel.registerPreset('react-classic', {
         presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]],
@@ -34,383 +34,422 @@
       const { useCallback, useEffect, useMemo, useRef, useState } = React
 
       /* ================================================================
-       * CURRICULUM
+       * COURSE
        * ---8<--- COURSE START
        *
-       * Written from scratch for this team. It teaches the same judgement
-       * the project needs without reproducing any client owned material.
+       * Lesson text and knowledge checks follow the source training pages.
+       * Questions marked extra: true are additional practice written for this
+       * team, and are labelled as such on screen so nobody mistakes them for
+       * the official checks.
        * ================================================================ */
 
       const TEAM = ['Deborah', 'Radical', 'Keji', 'Enny', 'Daniel', 'Mimo', 'Onaope']
 
+      // Files live in ./assets. Missing files fall back to a labelled slot.
+      const IMG = (file, caption) => ({ k: 'img', file, caption })
+
       const LESSONS = [
         {
-          id: 'seeing',
-          title: 'Looking before judging',
-          summary: 'Turn "it looks better" into something you can point at.',
+          id: 'howtosee',
+          title: 'How to See',
+          summary: 'Consistent observation, not taste.',
           blocks: [
-            { k: 'p', t: 'Two people rating the same pair should notice the same things, even if they weigh them differently. That only happens if you look in a fixed order instead of reacting to whichever image feels nicer.' },
-            { k: 'h', t: 'Read the prompt first, and read it twice' },
-            { k: 'p', t: 'Write down in your head what the prompt actually demands: every object, every change, every constraint on lighting or framing or text. Anything the prompt did not ask for is something that should have stayed the same. Half of all rating mistakes come from scoring an image you never really read the brief for.' },
-            { k: 'h', t: 'Judge the style the prompt asked for' },
-            { k: 'p', t: 'If the prompt asks for a cartoon, an illustration, a 3D render, or a diagram, then "this is not photorealistic" is not a fault. Ask whether the image holds together inside its own style. Photographic ideas like depth of field simply do not apply to a flat vector drawing. Broken hands and garbled text still count in every style.' },
-            { k: 'h', t: 'Then look at the picture in a fixed order' },
+            { k: 'p', t: 'When you look at an image, you should start by looking at its composition, what is being shown and how. This means you pay attention to the objects and subjects, and how they are framed and focused upon.' },
+            { k: 'p', t: 'Good image evaluation starts with consistent observation, not taste. Two annotators looking at the same image should notice the same things, even if they weigh them differently. The goal is to replace "looks good" or "feels off" with specific, observable claims.' },
+            { k: 'h', t: 'Style first, then these checks' },
+            { k: 'p', t: 'The checks below are written for photographic prompts. When a prompt asks for a non-photo style, illustration, cartoon, 3D, diagram, do not treat "not photorealistic" as a flaw. Judge whether the image holds together within that style; photographic cues like depth of field and photographic lighting may not apply. AI tells, garbled text, broken hands, melted features, still count regardless of style.' },
+            { k: 'h', t: 'Composition and framing' },
+            { k: 'p', t: 'Composition is how the elements of an image are arranged. When evaluating, ask:' },
             { k: 'list', t: [
-              'Composition. Where is the subject, and is it competing with clutter for your attention?',
-              'Framing. Does the shot distance, wide or medium or close, match what was asked for?',
-              'Hierarchy. What does your eye land on first, and is that the thing the prompt cared about?',
-              'Focus. Is the intended subject sharp? Check hair, eyelashes, edges, and any text.',
-              'Light. Where is the light coming from, and do all the shadows agree with each other?',
+              'Subject placement, is the main subject clearly positioned, or competing for attention with other elements?',
+              'Framing scale, does the shot distance (wide, medium, close-up) match what the prompt asked for?',
+              'Visual hierarchy, what draws your eye first? Does it match the intended focus?',
+              'Negative space, is the area around the subject intentional breathing room, or empty and unresolved?',
             ] },
-            { k: 'callout', t: 'Blur is not automatically a fault. A blurred background behind a sharp subject is a normal photographic choice. The question is whether the blur falls away smoothly from the point of focus, or shows up in random patches that follow no logic.' },
-            { k: 'p', t: 'By the end of this pass you should be able to finish the sentence "A is better because ..." with something a stranger could verify by looking. If you cannot, you have not looked hard enough yet.' },
+            IMG('thirds-desert.png', 'Same photo, side by side. With the rule-of-thirds grid overlaid you can see how the subject lines up on the intersections rather than dead center.'),
+            { k: 'p', t: 'Notice that on the right, the rock is positioned on the left gridline. Photographers generally try to use a 3 by 3 grid to compose images. The rule of thirds places your subject in the left or right third of an image, leaving the other two thirds more open. Notice that the right image evokes more vastness and space, even though technically it is simply a different crop of the same image.' },
+            { k: 'callout', t: 'A composition does not have to follow textbook rules, but it should look purposeful, not accidental.' },
+            IMG('thirds-bird.jpg', 'The subject sits at a rule-of-thirds intersection rather than dead center, creating tension and directing the eye naturally across the frame.'),
+            { k: 'h', t: 'Focus, detail and clarity' },
+            { k: 'callout', t: 'Blur is not always a flaw. Shallow depth of field (blurred background, sharp subject) is a legitimate photographic choice. The question is whether the blur is intentional and consistent, not whether it exists.' },
+            { k: 'list', t: [
+              'Sharpness, is the intended subject in focus? Check edges and fine details (hair strands, eyelashes, text).',
+              'Depth of field, does the blur fall off naturally from the focal point, or does it appear in patches with no logic?',
+              'Compression and detail loss, is fine detail (fabric weave, skin pores, grass blades) present where the image resolution should support it? Or is the image mushy in ways that look like generation failure rather than artistic choice?',
+            ] },
+            IMG('dof-daffodils.png', 'The same scene shot at a wide aperture versus a narrow one. The only thing that changes is how much of the frame is in sharp focus.'),
+            IMG('dof-portrait.jpg', 'Aperture f/2 against f/22. Smooth fall-off from the focal plane is a deliberate choice, not a defect.'),
           ],
           questions: [
             {
-              id: 'see1',
-              short: 'Non-photoreal style asked for',
-              q: 'A prompt asks for a hand drawn storybook illustration. The result is clearly not photorealistic. How should that affect your scoring?',
+              id: 'hs1',
+              extra: true,
+              short: 'Non-photo style asked for',
+              q: 'A prompt asks for a cartoon. The output is clearly not photorealistic. How should that affect your scoring?',
               options: [
-                'It should not count against the image, because the prompt asked for that style',
-                'It is a visual quality failure, since realistic images always score higher',
-                'It is an AI artifact, because real photos do not look like drawings',
-                'It should be scored as a tie until you can find a photo to compare against',
+                'Judge it within its own style. Not being photorealistic is not a flaw here',
+                'Lower Visual Quality, since photorealistic images are always stronger',
+                'Score it as an AI artifact, because real photos do not look like cartoons',
+                'Mark a tie until a photographic version is available to compare',
               ],
               answer: 0,
-              why: 'Judge an image inside the style it was asked for. Non-photorealism is only a fault when the prompt wanted realism. Broken hands or garbled text would still count here.',
+              why: 'When a prompt asks for a non-photo style, do not treat "not photorealistic" as a flaw. Judge whether the image holds together within that style. AI tells like garbled text or broken hands still count regardless of style.',
             },
             {
-              id: 'see2',
-              short: 'Blurred background, sharp subject',
-              q: 'The background of an image is soft while the subject is razor sharp, and the softness increases smoothly with distance. What is this?',
+              id: 'hs2',
+              extra: true,
+              short: 'Smooth versus patchy blur',
+              q: 'The background is soft while the subject is sharp, and the softness falls off smoothly with distance. What is this?',
               options: [
-                'A normal photographic choice, not a fault',
-                'A blur artifact that lowers visual quality',
-                'Proof the image was generated rather than photographed',
+                'Patchy blur, which is a generation tell',
+                'A deliberate wide-aperture choice, not a fault',
                 'A reference preservation failure',
+                'Proof the image was generated rather than photographed',
               ],
-              answer: 0,
-              why: 'Shallow depth of field is a legitimate technique. It only becomes a problem when blur appears in patches with no logic, such as a sharp background behind a blurred face.',
+              answer: 1,
+              why: 'Smooth fall-off from the focal plane signals a deliberate wide-aperture choice. Patchy blur or sharp-edged halos around the subject would be the AI tell instead.',
             },
           ],
         },
+
         {
           id: 'quality',
-          title: 'Visual quality: the whole image',
-          summary: 'Craft judged across the full frame, not local damage.',
+          title: 'Visual Quality',
+          summary: 'Contrast, colour temperature and saturation across the whole frame.',
           blocks: [
-            { k: 'p', t: 'Visual quality asks one question: as a finished picture, is this well made? You are judging the whole frame at once. Sharpness, exposure, colour, and arrangement. Nothing here is about a specific broken object, which belongs in the next lesson.' },
-            { k: 'h', t: 'What lowers visual quality' },
+            { k: 'p', t: 'Visual Quality judges the whole image. Is it sharp, properly lit, and well composed? Penalise overall oversaturation, blurriness, or a washed-out look.' },
+            { k: 'h', t: 'What to check, and what to look for' },
             { k: 'list', t: [
-              'Softness across the whole image, where detail that should be crisp is mushy.',
-              'Oversaturation. Colours pushed past anything a real camera would record.',
-              'A washed out, flat, low contrast look with no true blacks or whites.',
-              'Lighting that contradicts itself, such as shadows falling in two directions at once.',
-              'Crushed shadows or blown highlights that swallow all detail.',
-              'Careless arrangement, with the subject cramped against an edge for no reason.',
+              'Contrast. Are highlights blown (pure white, no detail) or shadows crushed (pure black)?',
+              'Colour temperature. Is the image consistently warm (golden, amber) or cool (blue, gray)? Mixed temperatures across one scene are a red flag unless the lighting explains it.',
+              'Saturation. Is colour intensity consistent, or do some regions look over-processed while others are flat?',
             ] },
-            { k: 'h', t: 'The lighting test' },
-            { k: 'p', t: 'Ask three questions in order. Where is the light coming from? Where should the shadows fall if that is true? Do the actual shadows agree? Images that feel subtly wrong without an obvious flaw usually fail this test. A scene lit from the left with shadows pointing left is the giveaway.' },
-            { k: 'callout', t: 'Very heavy colour and perfectly even lighting with no off colour highlights often means a filter was applied over a weak image. Score it down here, and check the artifacts axis too, because that look often travels with other tells.' },
-            { k: 'h', t: 'Keep it separate from artifacts' },
-            { k: 'p', t: 'One deformed hand in an otherwise beautiful photograph is not a visual quality problem. The picture is sharp, well lit, and well arranged. The hand is a local failure and belongs on the artifacts axis. Only lower visual quality when something is wrong with the image as a whole.' },
+            IMG('saturation-tuscany.jpg', 'The same landscape, normal on the left and with saturation cranked on the right.'),
+            { k: 'h', t: 'Where is the light coming from?' },
+            { k: 'p', t: 'When you assess on this dimension, ask yourself: where is the light source? Where are the shadows? Where is the blur supposed to be?' },
+            IMG('lighting-portrait.jpg', 'Directional light with shadows that agree on a single source.'),
+            IMG('oversaturation-cinema.jpg', 'Cranked saturation and punchy colours look dramatic, but they are a Visual Quality loss and a common AI tell. The tells here: cloud detail in a sky that should be dark, lights perfectly illuminated, coat shadows falling the wrong way, and the car blurry despite shallow depth of field.'),
+            { k: 'p', t: 'When colours feel pushed past what a real camera would produce, the image likely has a rendering artifact. Score it down on Visual Quality, and watch for Absence of AI Artifacts (the "filter-applied" look) as a secondary hit.' },
+            IMG('composition-bike.jpg', 'Negative space used deliberately rather than left empty and unresolved.'),
+            { k: 'h', t: 'Watch out for' },
+            { k: 'list', t: [
+              'Oversaturation, unnaturally punchy or over-processed colours.',
+              'Blown highlights or crushed shadows, pure white or pure black areas with no detail.',
+              'Patchy or haloed blur, depth-of-field falloff that is not smooth, or sharp-edged transitions around the subject.',
+              'Mixed colour temperature in one scene, warm and cool light together with no source to explain it.',
+              'Inconsistent shadow direction, shadows that do not agree on where the light is coming from.',
+              'Compositional accidents, subject centered or cropped in ways that do not read as purposeful.',
+            ] },
           ],
           questions: [
             {
-              id: 'q1',
-              short: 'Six fingers, otherwise clean',
-              q: 'An image is sharp, well lit, and nicely arranged, but the subject has six fingers on one hand. Which axis should take the hit?',
+              id: 'vq1',
+              short: 'Colours past a real camera',
+              q: 'Two responses look nearly identical, but one has colors pushed far past what a real camera would produce, overly even lighting, no off-color highlights, too-clean reflections. Which dimensions should this most affect?',
               options: [
-                'AI artifacts only. Visual quality is about the whole image',
-                'Visual quality only, because the image now looks wrong',
-                'Both axes equally, since a flaw is a flaw',
-                'Neither, because hands are always hard to generate',
+                'Visual Quality (and watch Absence of AI Artifacts for the "filter-applied" look)',
+                'Instruction Following, the colors mean the model ignored the prompt',
+                'Person ID Preservation, saturation changes who the person is',
               ],
               answer: 0,
-              why: 'A local structural failure is an artifact. The frame as a whole is still well made, so visual quality should not be reduced. Double penalising one flaw across two axes distorts the comparison.',
+              why: 'Oversaturation and unnaturally even lighting are a Visual Quality loss, and the "filter-applied" look is also a tell under Absence of AI Artifacts.',
             },
             {
-              id: 'q2',
-              short: 'Oversaturated, even lighting',
-              q: 'Two responses are near identical, but one has colours pushed far past what a camera could capture, with unnaturally even lighting. Where does this count most?',
+              id: 'vq2',
+              short: 'Picnic boy, irregular fingers',
+              q: 'In the picnic example, Response A shows slightly irregular fingers and toes on the boy while Response B\'s hands and feet look clean. The two are otherwise near-identical. What\'s the right move?',
               options: [
-                'Visual quality, and check artifacts for a filtered look',
-                'Instruction following, because the colours ignore the prompt',
-                'Reference preservation, because the colour changed',
-                'It is a tie, since colour is a matter of taste',
+                'Prefer Response B, ambiguous extremity distortion is a known AI tell, so pick the cleaner one',
+                'Mark them tied, the difference is too small to call',
+                'Prefer Response A, the irregular fingers are likely just the camera angle',
               ],
               answer: 0,
-              why: 'Oversaturation and flat, even light are whole image craft problems, so they land on visual quality. That look often accompanies other generation tells, so the artifacts axis is worth a second look.',
-            },
-            {
-              id: 'q3',
-              short: 'Shadows disagree with light',
-              q: 'In a scene the light clearly comes from a window on the left, yet the shadows also stretch to the left. What have you found?',
-              options: [
-                'A lighting logic failure that lowers visual quality',
-                'A reference preservation failure',
-                'Nothing scoreable, since shadows are unpredictable',
-                'An instruction following failure',
-              ],
-              answer: 0,
-              why: 'Shadows must agree with the light source. When they do not, the whole image is physically wrong, which is a visual quality problem rather than a local artifact.',
+              why: 'You don\'t need to name the exact artifact. Ambiguous extremity distortion is a known AI tell, pick the cleaner response rather than tying.',
             },
           ],
         },
+
         {
-          id: 'artifacts',
-          title: 'AI artifacts: local damage',
-          summary: 'The specific broken places, and why counting them matters.',
+          id: 'realism',
+          title: 'Realism and Artifacts',
+          summary: 'The predictable ways generators fail, and how to describe them.',
           blocks: [
-            { k: 'p', t: 'Artifacts are local. Something in one region of the picture is structurally wrong in a way no camera and no competent artist would produce. You find them by zooming in, not by squinting at the whole frame.' },
-            { k: 'h', t: 'Where to look, in order' },
+            { k: 'p', t: 'AI image generators fail in predictable ways. Knowing the patterns lets you spot problems quickly, and describe them precisely enough to support a rating.' },
+            { k: 'h', t: 'Worked example, editing for lighting and shadow realism' },
+            { k: 'p', t: 'Prompt: Can you make this bicycle look like a vintage cream city bike with a small wicker front basket? Soften the lighting a little and make it feel like an early morning street scene.' },
+            IMG('bike-original.jpg', 'Original.'),
+            IMG('bike-edit-a.jpg', 'Edit A.'),
+            IMG('bike-edit-b.jpg', 'Edit B, fewer artifacts.'),
+            { k: 'p', t: 'Edit B wins. Low directional morning light casts a dappled shadow across the wall, and the bike sits on a proper contact shadow, a believable early-morning street, which is what the prompt asked for. Edit A has two tells: a pedal is missing, and the ground shadow does not line up with any light source (the wall is lit flat, no texture). The lighting was softened by flattening it, an "AI-flat" studio shot, not a street scene.' },
+            { k: 'h', t: 'Anatomy, texture and realism' },
             { k: 'list', t: [
-              'Hands and feet. Count the fingers and toes every single time. This is the most common failure by a wide margin.',
-              'Faces. Check that both eyes look in the same direction, that teeth are not fused or multiplied, and that ears match.',
-              'Text. Any writing on signs, labels, packaging, or clothing. Generated text often collapses into letter shaped nonsense.',
-              'Skin. A waxy, poreless, plastic sheen is a tell, not good retouching.',
-              'Joins and edges. Look where an arm meets a sleeve, or hair meets a shoulder, for melted or smeared boundaries.',
-              'Repeats. The same face in a crowd, or a pattern that duplicates where it should vary.',
-              'Physics. Objects that float, cast no shadow, or pass through one another.',
+              'Faces. Proportions: eye spacing, nose-to-mouth distance, jawline shape. Eyes: are pupils the same size? Are catchlights consistent between eyes? Skin: overly smooth or waxy skin is a common generation tell, real skin has pores, variation, and subtle texture.',
+              'Hands. The most common failure point. Check finger count, finger length relative to palm, visible knuckles, natural overlap between fingers. Fused or missing fingers are immediate flags.',
+              'Bodies and limbs. Limb length proportional to torso, joints bending at anatomically plausible points, clothing that drapes, folds and creases with the body underneath it.',
+              'Surfaces and materials. Real materials have characteristic texture: skin has pores, fabric has weave, hair has individual strands, metal reflects. Over-smooth surfaces, tiled patterns, and loss of fine detail are all artifact signals.',
             ] },
-            { k: 'callout', t: 'You do not have to name the artifact to score it. If something about a hand looks off and you cannot decide whether it is damage or just an odd angle, prefer the cleaner image. Ambiguous damage in one image and none in the other is still a real difference. Do not retreat to a tie.' },
-            { k: 'h', t: 'Count and severity both matter' },
-            { k: 'p', t: 'Three small artifacts against two of the same kind is a narrow gap. One clean image against one with a mangled hand is a wide gap. And the same small flaw repeated four times is not the same as it appearing once, even though each instance is minor on its own. Repetition turns a small problem into a large one.' },
+            IMG('hand-artifact.jpg', 'A typical AI hand failure: wrong finger count, unnatural fusing, and implausible joint structure. This is what to scan for before rating anatomy.'),
+            { k: 'h', t: 'AI artifact patterns' },
+            { k: 'p', t: 'Artifacts cluster into four categories: anatomy failures, texture problems, text rendering, and object and scene inconsistencies. Text rendering and structural anatomy are the two artifact types that show up most in complex prompts.' },
+            IMG('panda-garbled-text.jpg', 'Prompt requested a Chinese speech bubble saying "Look! Panda!". The model produced garbled pseudo-characters instead of legible text.'),
+            IMG('centaur.jpg', 'The model has no real understanding of how two body types should connect, so the anatomy collapses at the join.'),
+            { k: 'h', t: 'Describing what you see' },
+            { k: 'p', t: 'Ratings are only useful if the justification supports them. Grounded descriptions reference what is actually in the image, not how it makes you feel.' },
+            { k: 'table', t: [
+              ['Weak (subjective)', 'Strong (observable)'],
+              ['"This looks off"', '"The shadow on the left wall falls at a different angle than the shadow under the chair"'],
+              ['"The hands look weird"', '"The right hand has six fingers; the thumb and index finger appear fused"'],
+              ['"Image A is better quality"', '"Image A has sharper hair detail and consistent shadow direction; Image B\'s background is smeared and the subject\'s left arm is unnaturally elongated"'],
+              ['"B feels more realistic"', '"B has more consistent skin texture and natural fabric draping; A has waxy skin and a visible seam at the subject\'s collar"'],
+            ] },
+            { k: 'callout', t: 'When writing a justification: name the element, describe what you observe, and connect it to the axis you are rating.' },
           ],
           questions: [
             {
-              id: 'a1',
-              short: 'Ambiguous finger damage',
-              q: 'Two responses look the same at a glance. Zoomed in, one has slightly irregular fingers and the other is clean. Nothing else differs. What do you do?',
+              id: 'ra1',
+              short: 'Strongest anatomy flag',
+              q: 'You\'re rating an AI-generated portrait. Which observation is the strongest anatomy-based artifact flag?',
               options: [
-                'Prefer the clean one. Ambiguous damage is still a real difference',
-                'Mark a tie, because the difference is too small to be sure about',
-                'Prefer the irregular one, since odd angles can explain it away',
-                'Ignore hands, because they are known to be difficult',
+                'The subject is smiling with their mouth slightly open',
+                'The right hand shows six fingers, and the thumb appears fused to the index finger',
+                'The background is slightly out of focus',
+                'The subject\'s shirt is a solid color',
               ],
-              answer: 0,
-              why: 'You do not need to prove what caused it. One image carries possible damage and the other does not, which is a genuine separation. Ties are for images that are truly even.',
+              answer: 1,
+              why: 'Finger count and fusing are classic anatomy failures, the clearest, most defensible artifact call.',
             },
             {
-              id: 'a2',
-              short: 'Garbled shop sign',
-              q: 'A shop sign in the background reads as letter shaped shapes that do not spell anything. Which axis does this belong to?',
+              id: 'ra2',
+              short: 'Fresh Bread garbled sign',
+              q: 'A prompt asks for a storefront sign that reads "Fresh Bread." The generated image shows a sign with letter-like shapes that don\'t spell anything readable. Which artifact category is this?',
               options: [
-                'AI artifacts. Garbled text is a classic local failure',
-                'Visual quality, because it makes the image look bad',
-                'Instruction following, unless the prompt mentioned the sign',
-                'It does not count, because it is in the background',
+                'Anatomy failure',
+                'Object & scene inconsistency',
+                'Text rendering',
+                'Texture problem',
               ],
-              answer: 0,
-              why: 'Unreadable generated text is one of the most reliable artifact tells. It is local damage, so it belongs on the artifacts axis whether it sits in the foreground or the background.',
+              answer: 2,
+              why: 'Garbled or unreadable letters are a text rendering failure, especially common when specific words are requested.',
             },
             {
-              id: 'a3',
-              short: 'Same flaw four times vs once',
-              q: 'One image repeats the same small smudge artifact four times. The other has it once. How should you treat this?',
+              id: 'ra3',
+              short: 'Best justification for realism',
+              q: 'Which justification best supports a lower rating on realism?',
               options: [
-                'As a wide gap. Repetition makes a small flaw into a large one',
-                'As a narrow gap, since each instance is individually minor',
-                'As a tie, because both images contain the same flaw',
-                'As a visual quality issue rather than an artifact one',
+                'Image A just feels off compared to Image B',
+                'Image A\'s cast shadow falls to the left of the subject while the window light comes from the left, and the subject\'s left hand has fused fingers',
+                'Image A is clearly AI-generated',
+                'Image A doesn\'t look as good as Image B',
               ],
-              answer: 0,
-              why: 'Count matters as much as severity. The same flaw appearing four times against once is a clear separation and usually justifies a strong call rather than a slight one.',
+              answer: 1,
+              why: 'Grounded. It names the elements, describes the observation, and ties it to realism.',
+            },
+            {
+              id: 'ra4',
+              short: 'Sci-Fi telltales',
+              q: 'The prompt asks to generate an imaginary scene in a Sci-Fi movie. The response shows a flying submarine in the sky, an empty street with garbled store signage, and highly intense colors overall. Which of the details are telltales when evaluating the realism / less AI Generated dimension?',
+              options: [
+                'Flying submarine, no submarines can fly in reality',
+                'Empty street with garbled store signage, the signs aren\'t human-readable',
+                'Intense colors overall, they look unnatural',
+                'All of the above',
+              ],
+              answer: 3,
+              why: 'All three are telltales. Even in an imaginary Sci-Fi scene, garbled signage and unnatural colour intensity are generation failures rather than creative choices.',
+            },
+            {
+              id: 'ra5',
+              short: 'Comic and manga realism',
+              q: 'The prompt asks to generate a comic / manga styled image in a school. Which statement is correct when evaluating the realism dimension?',
+              options: [
+                'Comic / manga is unreal by definition, so the realism dimension is not evaluable',
+                'Look for unrealistic objects that don\'t fit in the overall setting',
+                'Computer-rendered images are more real than hand sketches',
+                'All of the above',
+              ],
+              answer: 1,
+              why: 'Style does not exempt an image from the realism dimension. Judge it within its own style and look for objects that do not belong in the setting.',
             },
           ],
         },
+
+        {
+          id: 'artifact',
+          title: 'AI Artifact, and its scope',
+          summary: 'Why it is a separate axis from Visual Quality.',
+          blocks: [
+            { k: 'p', t: 'In T2I tasks, an AI artifact is the still image a model generates from a text prompt. Two such images from the same prompt are shown side by side, and your job is to rate each one on four axes. One of those axes, Absence of AI Artifacts, has a specific scope: it covers generation tells visible in the image, not every quality issue. Understanding this scope is what separates a calibrated rater from one who double-penalizes.' },
+            { k: 'h', t: 'Why it is its own axis' },
+            { k: 'p', t: 'An image can be technically sharp, well-composed, and beautifully lit, and still contain serious artifacts. The reverse is also true: an image can have one bad hand and otherwise be excellent. If you treat artifacts as a general quality problem, you will count the same flaw twice, once on AI Artifacts and again on Visual Quality. That inflates the penalty beyond what the defect actually warrants.' },
+            { k: 'callout', t: 'AI Artifacts are local, generation-specific tells: bad fingers, garbled text, tiling, floating objects. Visual Quality judges the whole image: sharpness, composition, lighting. A single bad hand is an AI Artifacts finding. Only lower Visual Quality when the whole image looks soft, blurry, or washed out.' },
+            { k: 'h', t: 'Four classes to check on every T2I image' },
+            { k: 'list', t: [
+              'Anatomy failures',
+              'Texture problems',
+              'Text rendering',
+              'Object and scene inconsistencies',
+            ] },
+            { k: 'h', t: 'Operational test' },
+            { k: 'p', t: 'Ask one question for each element you inspect: is what I see explained by the prompt, or does it look like the model failed to generate it correctly? A shadow falling the wrong way is a generation failure. A blurry background in a shallow-focus portrait is composition, that is Visual Quality. Text that looks like it belongs to a different language than the prompt requested is an artifact. Text that is readable but in a different font than you would prefer is an aesthetic call, not an artifact.' },
+          ],
+          questions: [
+            {
+              id: 'ai1',
+              extra: true,
+              short: 'Blurry background, shallow focus',
+              q: 'A shallow-focus portrait has a blurry background. Applying the operational test, where does this belong?',
+              options: [
+                'Absence of AI Artifacts, blur is a generation tell',
+                'Visual Quality, because it is composition and the prompt explains it',
+                'Both axes, since the flaw is visible',
+                'Instruction Following, unless the prompt asked for blur',
+              ],
+              answer: 1,
+              why: 'The test asks whether what you see is explained by the prompt or looks like a generation failure. A blurry background in a shallow-focus portrait is composition, which is Visual Quality, not an artifact.',
+            },
+          ],
+        },
+
         {
           id: 'severity',
-          title: 'Sizing your vote',
-          summary: 'Slightly, strongly, or tie, and the mistake almost everyone makes.',
+          title: 'How to mark severity',
+          summary: 'Size the vote to the gap, not to your confidence.',
           blocks: [
-            { k: 'p', t: 'Every axis uses the same five point scale: strongly A, slightly A, tie, slightly B, strongly B. The size of your vote should describe the size of the gap between the two images. It should not describe how confident you are feeling.' },
-            { k: 'h', t: 'Slightly' },
-            { k: 'p', t: 'The two are broadly comparable and the call took you some thought. You can name the single detail that separates them, or the difference only shows up when you look closely, or you accept that a careful colleague could land the other way. Three small artifacts against two is a slightly.' },
-            { k: 'h', t: 'Strongly' },
-            { k: 'p', t: 'The winner is obvious on first look. The loser has a failure that a casual viewer would point at without being asked: mangled anatomy, a required element missing, the reference style abandoned. You would be surprised if another rater disagreed.' },
+            { k: 'p', t: 'Your vote strength should reflect how big the difference between the two images really is, not how confident you feel. You will use this five-point scale for Overall Preference and for each dimension you score: Strongly Prefer A, Slightly Prefer A, Tie, Slightly Prefer B, Strongly Prefer B.' },
+            { k: 'h', t: 'Slightly prefer' },
+            { k: 'p', t: 'The two images are broadly comparable and the call takes some deliberation. Usually one of: you can name the one detail that sets one response apart from the other, both look similar and the only difference shows up on a close look, or another rater could reasonably land the other way. Example: on AI artifacts, Response A has 3 visible artifacts and Response B has 2, just a one-artifact gap, so Slightly Prefer B.' },
+            { k: 'h', t: 'Strongly prefer' },
+            { k: 'p', t: 'The winner is obvious on the first look. Usually one of: the losing image has a jarring failure a casual viewer would immediately flag (bad anatomy, a required element missing or wrong, the reference style broken, an obvious artifact), or you would not second-guess it, and you would not expect another rater to land differently.' },
             { k: 'h', t: 'Tie' },
-            { k: 'p', t: 'After looking properly, neither image is better. This is genuinely rare. If you are using tie because deciding is hard, that is not a tie, that is an unfinished decision. Ties across every axis at once are a sign of low effort and get noticed.' },
-            { k: 'callout', t: 'The most common mistake by far is under-calling. People pick slightly to feel safe. Before you settle for slightly, check the three cases below, because each one is a strongly.' },
-            { k: 'h', t: 'These three are always strongly' },
+            { k: 'p', t: 'Neither image is meaningfully better after a careful look. Truly rare. Example: both responses have the same 2 artifacts at the same severity and nothing else separates them, so Tie, and still name what you compared and why it came out even.' },
+            { k: 'callout', t: 'Rule of thumb. Imagine someone glanced at both images. Slightly, they would pick the winner when you ask them to choose. Strongly, they would point out the problem unprompted.' },
+            { k: 'h', t: 'Example 1, a Slightly call' },
+            { k: 'p', t: 'Editing prompt: add the protective headgear a construction worker wears on site, change nothing else.' },
+            IMG('hardhat-reference.jpg', 'Reference.'),
+            IMG('hardhat-output-a.jpg', 'Output A.'),
+            IMG('hardhat-output-b.jpg', 'Output B.'),
+            { k: 'p', t: 'What you see: both outputs add the hard hat cleanly. Both also subtly flatten the man\'s head shape, which the prompt did not ask for, so that flaw appears on both sides and does not separate them. The real difference: Output B adds three unnecessary white lines on his forehead; Output A does not.' },
+            { k: 'p', t: 'Overall Preference, Slightly Prefer A. Both images follow the core instruction and are fully usable. The only real separator is B\'s small unrequested detail (the white lines), which you notice on a close look. The shared head-shape change does not decide the call, so the gap is real but minor, making it a Slightly, not a Strongly.' },
+            { k: 'h', t: 'Example 2, a Strongly call' },
+            { k: 'p', t: 'Editing prompt: Add a large, hyper-realistic human eyeball resting on the wooden floor in the immediate foreground of the hallway, centered on the floorboards and facing upward toward the ceiling, as if it has fallen from the artwork at the end.' },
+            IMG('eyeball-reference.jpg', 'Reference.'),
+            IMG('eyeball-output-a.jpg', 'Output A.'),
+            IMG('eyeball-output-b.jpg', 'Output B.'),
+            { k: 'p', t: 'What you see: Output A adds the eyeball exactly as described, large, hyper-realistic, on the floorboards, and preserves the reference\'s style and everything else. Output B recolors the eyeball and shifts the artistic style, so it looks out of place and creepy rather than blending in, and it even colorizes the man\'s eye for no reason, changes nobody asked for.' },
+            { k: 'p', t: 'Overall Preference, Strongly Prefer A. B breaks the reference\'s style and adds several unrequested changes that are obvious at a glance, while A follows the prompt cleanly and preserves the source. The prompt-writer would spot the difference immediately, a big, clear gap, so it is a Strongly.' },
+            { k: 'h', t: 'The most common mistake: under-calling' },
+            { k: 'p', t: 'Fellows tend to default to Slightly to play it safe. Before you settle for a Slightly, check the three cases below, each one is a Strongly.' },
             { k: 'list', t: [
-              'All the separating faults sit on one side. One image is clean, the other carries every problem.',
-              'One image is missing something the prompt explicitly required, even if everything else matches.',
-              'The same flaw repeats several times in one image and once or never in the other.',
+              'All the differentiating flaws sit on one side, one image is clean, the other carries the problems.',
+              'One image misses something the prompt required, a missing or wrong required element is a Strongly, even if the rest looks similar.',
+              'The same flaw repeats, the same small artifact appearing 4 times versus once is a Strongly, not a Slightly. Count matters.',
             ] },
-            { k: 'p', t: 'A strongly preferred image can still have small flaws of its own. What matters is the size of the gap, not the perfection of the winner. Equally, a tie on one axis says nothing about the others.' },
+            { k: 'callout', t: 'Bottom line: do not shrink your vote just because you are not 100% sure. Size the vote to the gap between the images, not to your confidence.' },
           ],
           questions: [
             {
-              id: 's1',
-              short: 'Umbrella added, hand deformed',
-              q: 'The prompt asked to add a red umbrella to a person\'s hand. A adds it cleanly and looks natural. B adds it too, but the hand is clearly deformed. Nothing else separates them. Your overall call?',
+              id: 'sv1',
+              short: 'Red umbrella, deformed hand',
+              q: 'The prompt asked to add a red umbrella to the person\'s hand. Response A adds it cleanly and everything else looks natural. Response B adds the umbrella too, but the person\'s hand is clearly deformed. Nothing else separates the two. What\'s your Overall Preference?',
               options: [
-                'Strongly prefer A',
-                'Slightly prefer A',
+                'Strongly Prefer A',
+                'Slightly Prefer A',
                 'Tie',
-                'Slightly prefer B',
+                'Slightly Prefer B',
+                'Strongly Prefer B',
               ],
               answer: 0,
-              why: 'A deformed hand is exactly the jarring failure a casual viewer would point at unprompted, and every fault sits on one side. That is a strong call, not a cautious slight one.',
+              why: 'One side carries the only differentiating flaw and it\'s visible at a glance, that\'s a Strongly.',
             },
             {
-              id: 's2',
-              short: 'Three artifacts vs two',
-              q: 'Both follow the prompt and look good. On a close look, A has three minor soft edge artifacts and B has two of the same kind. Nothing else differs. Your overall call?',
+              id: 'sv2',
+              short: 'Three artifacts versus two',
+              q: 'Both responses follow the prompt and look good overall. Only on a close look do you notice Response A has 3 minor artifacts (a couple of soft, slightly-off edges) and Response B has 2 of the same kind. Nothing else separates them. What\'s your Overall Preference?',
               options: [
-                'Slightly prefer B',
-                'Strongly prefer B',
+                'Strongly Prefer A',
+                'Slightly Prefer A',
                 'Tie',
-                'Slightly prefer A',
+                'Slightly Prefer B',
+                'Strongly Prefer B',
               ],
-              answer: 0,
-              why: 'A one artifact gap of the same kind and severity is a narrow difference that needed a close look to find. B still wins, but it is a slight call.',
-            },
-            {
-              id: 's3',
-              short: 'Torn between slightly and strongly',
-              q: 'You are torn between slightly and strongly, mostly because you are not fully confident in your own eye. What should decide it?',
-              options: [
-                'The size of the gap between the images, not your confidence',
-                'Pick slightly, since it is the safer choice when unsure',
-                'Pick tie and explain the difficulty in your comments',
-                'Pick strongly, because bold votes score better',
-              ],
-              answer: 0,
-              why: 'Vote size describes the distance between the two images. Shrinking a vote because you feel uncertain systematically under-calls real differences, which is the single most common rating error.',
-            },
-            {
-              id: 's4',
-              short: 'Required element missing',
-              q: 'One response leaves out an object the prompt explicitly required. Everything else about the two is comparable. What is this?',
-              options: [
-                'A strong call against the response that left it out',
-                'A slight call, since only one element is affected',
-                'A tie, because the rest of the image is comparable',
-                'Not scoreable unless the object was the main subject',
-              ],
-              answer: 0,
-              why: 'A missing required element is one of the three cases that is always a strong call. The prompt set that element as a requirement, so failing it is a large gap however tidy the rest looks.',
+              answer: 3,
+              why: 'A one-artifact gap you only see on close inspection is a small but real edge, Slightly Prefer B.',
             },
           ],
         },
+
         {
-          id: 'overall',
-          title: 'Reaching an overall call',
-          summary: 'Combining the axes, and writing feedback worth reading.',
+          id: 'r2i',
+          title: 'Omni R2I Elo',
+          summary: 'The six axes, and how Overall is decided.',
           blocks: [
-            { k: 'p', t: 'Score every axis on its own first, then decide overall. Doing it the other way round, picking a winner and then bending each axis to agree, is the fastest way to produce ratings nobody trusts.' },
-            { k: 'h', t: 'No trading across axes' },
-            { k: 'p', t: 'An artifact in A does not cancel out an instruction failure in B. They are separate questions and each gets its own answer. Expect a mixed result. It is completely normal for one response to win visual quality and lose on identity or instructions.' },
-            { k: 'h', t: 'How the overall call falls out' },
+            { k: 'p', t: 'In Reference-to-Image (R2I) tasks, an AI uses reference photos plus a text prompt to generate a new image. You score two responses across six dimensions: Overall, Instruction Following, Person ID, Reference Preservation, Visual Quality, and AI Artifacts.' },
+            { k: 'h', t: 'For this task' },
             { k: 'list', t: [
-              'Count the axes each side won outright.',
-              'Whoever won more axes takes the overall call.',
-              'If the count is level, instruction following breaks the tie.',
-              'If the count is level and instruction following is itself a tie, the overall result is a tie.',
+              'Overall. Count the dimensions, whoever wins more takes Overall; a true split falls to Instruction Following.',
+              'Instruction Following. The tiebreaker, decides Overall only when the dimensions split evenly.',
+              'Reference Preservation. Ties OK, untargeted regions are often near-identical in both responses.',
             ] },
-            { k: 'callout', t: 'The calculator on this site does exactly this arithmetic for you. Score each axis, and it will work out the overall call and the strength, including the tie break.' },
-            { k: 'h', t: 'Writing the feedback' },
-            { k: 'p', t: 'Say which response won and why, then point at something a reader could verify. "B is better" tells nobody anything. "B keeps the sign text readable while A turns it into letter shaped noise" can be checked in seconds. Name the thing and say where it is.' },
-            { k: 'p', t: 'Keep the axes separate in your writing too. One clause per axis, each with its own evidence, then the overall call and the reason it came out that way. Feedback that reads as though every rater copied the same template gets flagged just as fast as a blank comment.' },
+            { k: 'h', t: 'How to do the task' },
+            { k: 'list', t: [
+              'Read the prompt. Check for what the prompt asks to change. If the prompt does not ask for a particular change, keep that in mind.',
+              'Review the reference image. Ask yourself, what must carry over?',
+              'Study and zoom into every image. Look at hands, faces, text, and edges. Hands can be blurred or you may see an extra finger.',
+              'Score the six dimensions independently. Some images will win on visual quality but lose on Person ID Preservation. Do not assume Response B wins across all categories.',
+              'Pick a winner. A tie on an attribute is rare, reserve it only for when two responses genuinely perform the same on that one dimension.',
+            ] },
+            { k: 'callout', t: 'Annotations that tie-spam, or select "slightly prefer X" across all categories, may get a lower quality score, because you have not put in the effort to clearly distinguish the axes.' },
+            { k: 'h', t: 'Watch out for' },
+            { k: 'list', t: [
+              'Waxy and overly smooth skin can be artifacts, not polish.',
+              'Abnormal limb or finger count is a sign of AI artifacts.',
+              'Unrequested camera or framing shifts may lower reference preservation.',
+              'Accessories (earrings, logos) should be preserved from reference to image.',
+              'Oversaturation loses on Visual Quality. Balanced compositions win.',
+              'No cross-dimension trade-offs. An artifact in A does not offset an instruction failure in B.',
+              'Ties as a hedge. Avoid them.',
+            ] },
           ],
           questions: [
             {
-              id: 'o1',
+              id: 'r2i1',
+              short: 'Person ID, clothing and pose',
+              q: 'A reference person now wears different clothing and strikes a new pose, but their facial structure and features still clearly read as the same individual. How should you score Person ID Preservation?',
+              options: [
+                'ID is preserved, clothing and pose don\'t define identity, the recognizable face does',
+                'ID is broken, the changed clothing and pose mean the person wasn\'t preserved',
+                'It depends on Visual Quality, a crisp image always preserves ID',
+              ],
+              answer: 0,
+              why: 'Facial structure and unique human features are what Person ID measures. Changed clothing or poses do not mean ID is broken, look closely at the face.',
+            },
+            {
+              id: 'r2i2',
+              extra: true,
               short: 'Two axes each, IF favours A',
-              q: 'Across five axes, A wins two, B wins two, and one is a tie. Instruction following favours A. What is the overall call?',
+              q: 'Across the five scored dimensions, A wins two, B wins two, and one is a tie. Instruction Following favours A. What is the Overall call?',
               options: [
-                'Slightly prefer A, decided by instruction following',
-                'Tie, because the axis count is level',
-                'Strongly prefer A, because it won the most important axis',
-                'Slightly prefer B, because ties favour the second response',
+                'Tie, because the dimension count is level',
+                'Slightly Prefer B, because ties favour the second response',
+                'Slightly Prefer A, decided by Instruction Following',
+                'Strongly Prefer A, because it won the tiebreaker axis',
               ],
-              answer: 0,
-              why: 'A level axis count is a true split, and instruction following is the tie breaker. It favours A, so the overall call is a slight preference for A.',
-            },
-            {
-              id: 'o2',
-              short: 'Artifact vs instruction failure',
-              q: 'A has a bad artifact. B fails to follow an explicit instruction. How should you handle the two problems?',
-              options: [
-                'Score each axis separately. One does not offset the other',
-                'Cancel them out and call the pair a tie',
-                'Give the win to A, since instructions matter more than artifacts',
-                'Give the win to B, since artifacts are more visible',
-              ],
-              answer: 0,
-              why: 'Axes are independent. A takes the loss on artifacts, B takes the loss on instruction following, and the overall call comes from counting axis wins rather than trading one flaw against another.',
-            },
-            {
-              id: 'o3',
-              short: 'Which feedback is useful',
-              q: 'Which piece of written feedback is actually useful?',
-              options: [
-                'B keeps the shop sign readable while A turns it into letter shaped noise',
-                'B is better than A overall and looks much nicer',
-                'A is worse, it just feels off in a way that is hard to describe',
-                'Both are fine but I slightly prefer B on balance',
-              ],
-              answer: 0,
-              why: 'It names the specific difference and where to find it, so a reader can check the claim in seconds. The others report a feeling without evidence anyone could verify.',
+              answer: 2,
+              why: 'Count the dimensions first. A level count is a true split, and Instruction Following breaks it. It favours A, so Overall is a slight preference for A.',
             },
           ],
         },
       ]
 
-      /**
-       * The questions above were authored with the correct option written first,
-       * which would let anyone score full marks by always clicking the top
-       * choice. Rotate each set by an amount derived from the question id: the
-       * position varies, but it is stable across reloads and across people, so
-       * a stored answer index always means the same thing.
-       */
-      function rotateOptions(lessons) {
-        const hash = (s) => {
-          let h = 0
-          for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
-          return Math.abs(h)
-        }
-        lessons.forEach((lesson) =>
-          lesson.questions.forEach((q) => {
-            const n = q.options.length
-            const k = hash(q.id) % n
-            if (k === 0) return
-            const correct = q.options[q.answer]
-            q.options = q.options.slice(k).concat(q.options.slice(0, k))
-            q.answer = q.options.indexOf(correct)
-          })
-        )
-        return lessons
-      }
-
-      rotateOptions(LESSONS)
-
       const ALL_QUESTIONS = LESSONS.flatMap((l) => l.questions)
 
-      /** Suggested reading time, derived from the lesson text at a steady pace. */
-      function estimateMinutes(lesson) {
-        const words = lesson.blocks.reduce((n, b) => {
-          const text = Array.isArray(b.t) ? b.t.join(' ') : b.t
-          return n + text.trim().split(/\s+/).length
-        }, 0)
-        const qWords = lesson.questions.reduce(
-          (n, q) => n + (q.q + ' ' + q.options.join(' ')).trim().split(/\s+/).length,
-          0
-        )
-        // 200 words per minute of prose, and a slower 90 for questions you must weigh.
-        return Math.max(1, Math.round(words / 200 + qWords / 90))
-      }
-
       /**
-       * How many wrong options a person selected before landing on the correct
-       * one. Nothing on screen reveals correctness while they answer, so this
-       * measures genuine reconsideration rather than guess-and-check.
-       * A question they never got right counts every attempt as wrong.
+       * How many times a person checked a wrong answer before checking the
+       * correct one. Recorded on Check answer, not on selection, so it counts
+       * deliberate submissions rather than idle clicking.
        */
-      function wrongTries(q, attempts) {
-        const seq = (attempts && attempts[q.id]) || []
+      function wrongTries(q, checks) {
+        const seq = (checks && checks[q.id]) || []
         const firstRight = seq.indexOf(q.answer)
         return firstRight === -1 ? seq.length : firstRight
       }
@@ -423,12 +462,22 @@
         return correct
       }
 
-      /* ---8<--- COURSE END */
+      /** Suggested reading time, derived from each lesson's own length. */
+      function estimateMinutes(lesson) {
+        const words = lesson.blocks.reduce((n, b) => {
+          if (b.k === 'img') return n + 12
+          if (b.k === 'table') return n + b.t.flat().join(' ').split(/\s+/).length
+          const text = Array.isArray(b.t) ? b.t.join(' ') : b.t
+          return n + text.trim().split(/\s+/).length
+        }, 0)
+        const qWords = lesson.questions.reduce(
+          (n, q) => n + (q.q + ' ' + q.options.join(' ')).trim().split(/\s+/).length,
+          0
+        )
+        return Math.max(1, Math.round(words / 200 + qWords / 90))
+      }
 
-      /* ================================================================
-       * Result code
-       * Compact, URL safe, and readable by the dashboard page.
-       * ================================================================ */
+      /* ---8<--- COURSE END */
 
       function encodeResult(payload) {
         const json = JSON.stringify(payload)
@@ -436,23 +485,74 @@
         return 'HEDGE1.' + b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
       }
 
-      /* ================================================================
-       * UI
-       * ================================================================ */
+      /* ================================================================ */
 
       const cx = (...c) => c.filter(Boolean).join(' ')
 
       const fmt = (secs) => {
         const s = Math.max(0, Math.round(secs))
-        const m = Math.floor(s / 60)
-        return m + ':' + String(s % 60).padStart(2, '0')
+        return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
+      }
+
+      /** An image slot that degrades to a labelled placeholder when the file is absent. */
+      function Figure({ file, caption }) {
+        const [failed, setFailed] = useState(false)
+        return (
+          <figure className="mt-5">
+            {failed ? (
+              <div className="flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/40 p-6 text-center">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Image not added yet
+                </div>
+                <code className="mt-2 text-xs text-slate-400">assets/{file}</code>
+              </div>
+            ) : (
+              <img
+                src={'./assets/' + file}
+                alt={caption}
+                onError={() => setFailed(true)}
+                className="w-full rounded-xl border border-slate-800"
+              />
+            )}
+            {caption && (
+              <figcaption className="mt-2 text-xs leading-relaxed text-slate-500">{caption}</figcaption>
+            )}
+          </figure>
+        )
       }
 
       function Block({ block }) {
+        if (block.k === 'img') return <Figure file={block.file} caption={block.caption} />
         if (block.k === 'h')
           return <h3 className="mt-7 text-lg font-semibold text-slate-100">{block.t}</h3>
         if (block.k === 'p')
           return <p className="mt-3 text-[15px] leading-relaxed text-slate-300">{block.t}</p>
+        if (block.k === 'table')
+          return (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+                <tbody>
+                  {block.t.map((row, i) => (
+                    <tr key={i} className={i === 0 ? 'bg-slate-900/80' : 'border-t border-slate-800'}>
+                      {row.map((cell, j) => (
+                        <td
+                          key={j}
+                          className={cx(
+                            'px-3 py-2.5 align-top',
+                            i === 0 ? 'text-xs font-bold uppercase tracking-wider text-slate-400' : 'text-slate-300',
+                            i > 0 && j === 0 ? 'text-rose-300' : '',
+                            i > 0 && j === 1 ? 'text-emerald-300' : ''
+                          )}
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         if (block.k === 'list')
           return (
             <ul className="mt-3 space-y-2">
@@ -471,18 +571,28 @@
         )
       }
 
-      function Question({ q, index, value, onChange }) {
+      function Question({ q, index, value, checked, onChange, onCheck }) {
+        const revealed = checked !== undefined
+        const right = revealed && checked === q.answer
         return (
           <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-            <div className="flex gap-3">
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/20 text-xs font-bold text-indigo-300">
-                {index + 1}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                Knowledge check
               </span>
-              <p className="text-[15px] font-medium leading-relaxed text-slate-100">{q.q}</p>
+              {q.extra && (
+                <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  extra practice
+                </span>
+              )}
             </div>
+            <p className="mt-3 text-[15px] font-medium leading-relaxed text-slate-100">{q.q}</p>
+
             <div role="radiogroup" className="mt-4 space-y-2">
               {q.options.map((opt, i) => {
                 const active = value === i
+                const isAnswer = revealed && i === q.answer
+                const isWrongPick = revealed && active && i !== q.answer
                 return (
                   <button
                     key={i}
@@ -491,45 +601,72 @@
                     onClick={() => onChange(q.id, i)}
                     className={cx(
                       'flex w-full items-start gap-3 rounded-xl px-4 py-3 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
-                      active
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-slate-800/60 text-slate-300 hover:bg-slate-800'
+                      isAnswer
+                        ? 'bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/50'
+                        : isWrongPick
+                          ? 'bg-rose-500/20 text-rose-100 ring-1 ring-rose-400/50'
+                          : active
+                            ? 'bg-indigo-500 text-white'
+                            : 'bg-slate-800/60 text-slate-300 hover:bg-slate-800'
                     )}
                   >
                     <span
                       className={cx(
                         'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
-                        active ? 'border-white' : 'border-slate-500'
+                        active || isAnswer ? 'border-current' : 'border-slate-500'
                       )}
                     >
-                      {active && <span className="h-2 w-2 rounded-full bg-white" />}
+                      {(active || isAnswer) && <span className="h-2 w-2 rounded-full bg-current" />}
                     </span>
                     <span>{opt}</span>
                   </button>
                 )
               })}
             </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => onCheck(q.id)}
+                disabled={value === undefined}
+                className={cx(
+                  'rounded-xl px-4 py-2 text-sm font-semibold transition',
+                  value === undefined
+                    ? 'cursor-not-allowed bg-slate-800 text-slate-600'
+                    : 'bg-indigo-500 text-white hover:bg-indigo-400'
+                )}
+              >
+                Check answer
+              </button>
+              {revealed && (
+                <span className={cx('text-sm font-semibold', right ? 'text-emerald-400' : 'text-rose-400')}>
+                  {right ? 'Correct' : 'Not quite, try again'}
+                </span>
+              )}
+            </div>
+
+            {revealed && right && (
+              <p className="mt-3 rounded-xl bg-emerald-500/10 p-3 text-sm leading-relaxed text-emerald-200">
+                {q.why}
+              </p>
+            )}
           </div>
         )
       }
 
       function Start({ onStart }) {
         const [name, setName] = useState('')
-        const total = ALL_QUESTIONS.length
         const mins = LESSONS.reduce((n, l) => n + estimateMinutes(l), 0)
-
         return (
           <div className="mx-auto max-w-2xl">
             <h1 className="text-3xl font-bold text-slate-50">Image rating training</h1>
             <p className="mt-3 text-[15px] leading-relaxed text-slate-400">
-              Five short lessons on judging image pairs, each ending in a few questions.
-              Work through them in order. On the last page you submit and see your score.
+              Six lessons, each ending in knowledge checks. Use Check answer as you go.
+              On the last page you submit and see your score.
             </p>
-
             <div className="mt-6 grid grid-cols-3 gap-3">
               {[
                 ['Lessons', LESSONS.length],
-                ['Questions', total],
+                ['Questions', ALL_QUESTIONS.length],
                 ['Suggested', '~' + mins + ' min'],
               ].map(([k, v]) => (
                 <div key={k} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-center">
@@ -538,7 +675,6 @@
                 </div>
               ))}
             </div>
-
             <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
               <label className="text-sm font-semibold text-slate-200">Who is taking this?</label>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -547,7 +683,7 @@
                     key={n}
                     onClick={() => setName(n)}
                     className={cx(
-                      'rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                      'rounded-xl px-3 py-2.5 text-sm font-semibold transition',
                       name === n
                         ? 'bg-indigo-500 text-white'
                         : 'bg-slate-800/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
@@ -557,34 +693,30 @@
                   </button>
                 ))}
               </div>
-
               <button
                 disabled={!name}
                 onClick={() => onStart(name)}
                 className={cx(
-                  'mt-6 w-full rounded-xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
-                  name
-                    ? 'bg-indigo-500 text-white hover:bg-indigo-400'
-                    : 'cursor-not-allowed bg-slate-800 text-slate-600'
+                  'mt-6 w-full rounded-xl px-4 py-3 text-sm font-semibold transition',
+                  name ? 'bg-indigo-500 text-white hover:bg-indigo-400' : 'cursor-not-allowed bg-slate-800 text-slate-600'
                 )}
               >
                 {name ? 'Start as ' + name : 'Pick your name to begin'}
               </button>
               <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                The suggested time is a guide, not a limit. Take as long as you need.
+                The suggested time is a guide, not a limit.
               </p>
             </div>
           </div>
         )
       }
 
-      function Results({ name, answers, attempts, seconds, onRestart }) {
+      function Results({ name, answers, checks, seconds, onRestart }) {
         const score = scoreAnswers(answers)
         const total = ALL_QUESTIONS.length
         const pct = Math.round((score / total) * 100)
         const [copied, setCopied] = useState(false)
         const codeRef = useRef(null)
-
         const totalSecs = Object.values(seconds).reduce((a, b) => a + b, 0)
 
         const code = useMemo(
@@ -597,12 +729,10 @@
               d: new Date().toISOString().slice(0, 16),
               secs: LESSONS.map((l) => Math.round(seconds[l.id] || 0)),
               a: ALL_QUESTIONS.map((q) => (answers[q.id] === undefined ? -1 : answers[q.id])),
-              w: ALL_QUESTIONS.map((q) => wrongTries(q, attempts)),
-              // Correctness travels in the code so the dashboard never needs a
-              // second copy of the answer key to keep in sync.
+              w: ALL_QUESTIONS.map((q) => wrongTries(q, checks)),
               c: ALL_QUESTIONS.map((q) => (answers[q.id] === q.answer ? 1 : 0)),
             }),
-          [name, score, total, seconds, answers, attempts]
+          [name, score, total, seconds, answers, checks]
         )
 
         const copy = async () => {
@@ -641,14 +771,13 @@
           }
         }
 
-        const tone =
-          pct >= 80 ? 'emerald' : pct >= 60 ? 'amber' : 'rose'
-        const toneCard = {
+        const tone = pct >= 80 ? 'emerald' : pct >= 60 ? 'amber' : 'rose'
+        const card = {
           emerald: 'border-emerald-400/40 bg-emerald-500/10',
           amber: 'border-amber-400/40 bg-amber-500/10',
           rose: 'border-rose-400/40 bg-rose-500/10',
         }[tone]
-        const toneChip = {
+        const chip = {
           emerald: 'bg-emerald-500 text-emerald-950',
           amber: 'bg-amber-500 text-amber-950',
           rose: 'bg-rose-500 text-rose-950',
@@ -656,24 +785,17 @@
 
         return (
           <div className="mx-auto max-w-3xl">
-            <div className={cx('rounded-2xl border p-6', toneCard)}>
+            <div className={cx('rounded-2xl border p-6', card)}>
               <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                 Result for {name}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-4">
-                <span className={cx('rounded-xl px-4 py-2 text-3xl font-bold', toneChip)}>
+                <span className={cx('rounded-xl px-4 py-2 text-3xl font-bold', chip)}>
                   {score} / {total}
                 </span>
                 <span className="text-2xl font-semibold text-slate-200">{pct}%</span>
                 <span className="text-sm text-slate-400">Total time {fmt(totalSecs)}</span>
               </div>
-              <p className="mt-4 text-sm leading-relaxed text-slate-300">
-                {pct >= 80
-                  ? 'Strong pass. You can rate on your own, and re-read anything you missed below.'
-                  : pct >= 60
-                    ? 'Nearly there. Read back over the lessons behind the questions you missed.'
-                    : 'Worth another pass. Re-read the lessons, then take this again before rating.'}
-              </p>
             </div>
 
             <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
@@ -709,6 +831,7 @@
                 {lesson.questions.map((q) => {
                   const given = answers[q.id]
                   const right = given === q.answer
+                  const tries = wrongTries(q, checks)
                   return (
                     <div
                       key={q.id}
@@ -717,11 +840,9 @@
                         right ? 'border-emerald-400/30 bg-emerald-500/5' : 'border-rose-400/30 bg-rose-500/5'
                       )}
                     >
-                      <div className="flex items-start gap-2">
-                        <span className={cx('text-sm font-bold', right ? 'text-emerald-400' : 'text-rose-400')}>
-                          {right ? 'Correct' : 'Missed'}
-                        </span>
-                      </div>
+                      <span className={cx('text-sm font-bold', right ? 'text-emerald-400' : 'text-rose-400')}>
+                        {right ? 'Correct' : 'Missed'}
+                      </span>
                       <p className="mt-2 text-sm font-medium text-slate-200">{q.q}</p>
                       {!right && (
                         <p className="mt-2 text-sm text-rose-300">
@@ -730,10 +851,9 @@
                       )}
                       <p className="mt-1 text-sm text-emerald-300">Answer: {q.options[q.answer]}</p>
                       <p className="mt-2 text-sm leading-relaxed text-slate-400">{q.why}</p>
-                      {wrongTries(q, attempts) > 0 && (
+                      {tries > 0 && (
                         <p className="mt-2 text-xs text-amber-400">
-                          You changed your mind {wrongTries(q, attempts)} time
-                          {wrongTries(q, attempts) === 1 ? '' : 's'} before settling here.
+                          You checked {tries} wrong answer{tries === 1 ? '' : 's'} before this one.
                         </p>
                       )}
                     </div>
@@ -752,19 +872,42 @@
         )
       }
 
+      function Shell({ children }) {
+        return (
+          <div className="min-h-screen bg-slate-950 text-slate-200 antialiased">
+            <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
+              <header className="mb-8 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-lg">
+                    &#128218;
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-50">Rating training</div>
+                    <div className="text-xs tracking-wide text-slate-500">Study and knowledge checks</div>
+                  </div>
+                </div>
+                <a
+                  href="./index.html"
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                >
+                  Calculator
+                </a>
+              </header>
+              {children}
+            </div>
+          </div>
+        )
+      }
+
       function App() {
         const [name, setName] = useState(null)
         const [page, setPage] = useState(0)
         const [answers, setAnswers] = useState({})
-        // Every option a person clicks, in order, per question. The final entry
-        // is their answer; anything before it is a change of mind.
-        const [attempts, setAttempts] = useState({})
+        // Every answer submitted via Check answer, in order, per question.
+        const [checks, setChecks] = useState({})
         const [seconds, setSeconds] = useState({})
         const [done, setDone] = useState(false)
 
-        // Time on each lesson, accumulated from wall clock deltas. The tab going
-        // to the background pauses it, so leaving a page open overnight does not
-        // register as an eight hour read.
         const enter = useRef(Date.now())
         const current = LESSONS[page]
 
@@ -791,17 +934,26 @@
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }
 
-        const submit = () => {
-          bank(current.id)
-          setDone(true)
-          window.scrollTo({ top: 0, behavior: 'smooth' })
+        const check = (id) => {
+          const picked = answers[id]
+          if (picked === undefined) return
+          setChecks((prev) => {
+            const seq = prev[id] || []
+            if (seq[seq.length - 1] === picked) return prev
+            return { ...prev, [id]: seq.concat(picked) }
+          })
         }
 
-        const answered = current ? current.questions.filter((q) => answers[q.id] !== undefined).length : 0
+        const lastChecked = (id) => {
+          const seq = checks[id]
+          return seq && seq.length ? seq[seq.length - 1] : undefined
+        }
+
         const allAnswered = ALL_QUESTIONS.every((q) => answers[q.id] !== undefined)
+        const answered = current ? current.questions.filter((q) => answers[q.id] !== undefined).length : 0
         const last = page === LESSONS.length - 1
 
-        if (!name) {
+        if (!name)
           return (
             <Shell>
               <Start
@@ -812,28 +964,26 @@
               />
             </Shell>
           )
-        }
 
-        if (done) {
+        if (done)
           return (
             <Shell>
               <Results
                 name={name}
                 answers={answers}
-                attempts={attempts}
+                checks={checks}
                 seconds={seconds}
                 onRestart={() => {
                   setName(null)
                   setPage(0)
                   setAnswers({})
-                  setAttempts({})
+                  setChecks({})
                   setSeconds({})
                   setDone(false)
                 }}
               />
             </Shell>
           )
-        }
 
         return (
           <Shell>
@@ -844,14 +994,14 @@
                     <span
                       key={l.id}
                       className={cx(
-                        'h-1.5 w-10 rounded-full transition',
+                        'h-1.5 w-8 rounded-full transition',
                         i < page ? 'bg-indigo-400' : i === page ? 'bg-indigo-500' : 'bg-slate-800'
                       )}
                     />
                   ))}
                 </div>
                 <span className="text-xs text-slate-500">
-                  Lesson {page + 1} of {LESSONS.length} &middot; about {estimateMinutes(current)} min
+                  Page {page + 1} of {LESSONS.length} &middot; about {estimateMinutes(current)} min
                 </span>
               </div>
 
@@ -866,7 +1016,7 @@
 
               <div className="mt-10 border-t border-slate-800 pt-6">
                 <div className="flex items-baseline justify-between">
-                  <h2 className="text-lg font-semibold text-slate-100">Check yourself</h2>
+                  <h2 className="text-lg font-semibold text-slate-100">Knowledge checks</h2>
                   <span className="text-xs text-slate-500">
                     {answered} of {current.questions.length} answered
                   </span>
@@ -877,15 +1027,9 @@
                     q={q}
                     index={i}
                     value={answers[q.id]}
-                    onChange={(id, v) => {
-                      setAnswers((prev) => ({ ...prev, [id]: v }))
-                      setAttempts((prev) => {
-                        const seq = prev[id] || []
-                        // Clicking the same option again is not a new attempt.
-                        if (seq[seq.length - 1] === v) return prev
-                        return { ...prev, [id]: seq.concat(v) }
-                      })
-                    }}
+                    checked={lastChecked(q.id)}
+                    onChange={(id, v) => setAnswers((prev) => ({ ...prev, [id]: v }))}
+                    onCheck={check}
                   />
                 ))}
               </div>
@@ -901,12 +1045,16 @@
                       : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-100'
                   )}
                 >
-                  Back
+                  Previous
                 </button>
 
                 {last ? (
                   <button
-                    onClick={submit}
+                    onClick={() => {
+                      bank(current.id)
+                      setDone(true)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
                     disabled={!allAnswered}
                     className={cx(
                       'rounded-xl px-6 py-2.5 text-sm font-semibold transition',
@@ -929,38 +1077,11 @@
 
               {last && !allAnswered && (
                 <p className="mt-3 text-right text-xs text-amber-400">
-                  Some questions on earlier lessons are still blank. Use Back to finish them.
+                  Some questions on earlier pages are still blank. Use Previous to finish them.
                 </p>
               )}
             </div>
           </Shell>
-        )
-      }
-
-      function Shell({ children }) {
-        return (
-          <div className="min-h-screen bg-slate-950 text-slate-200 antialiased">
-            <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
-              <header className="mb-8 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-lg">
-                    &#128218;
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-slate-50">Rating training</div>
-                    <div className="text-xs tracking-wide text-slate-500">Study and self check</div>
-                  </div>
-                </div>
-                <a
-                  href="./index.html"
-                  className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
-                >
-                  Calculator
-                </a>
-              </header>
-              {children}
-            </div>
-          </div>
         )
       }
 

@@ -11,7 +11,7 @@
  * The result has zero external requests: it renders instantly and works offline.
  */
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { transformAsync } from '@babel/core'
@@ -101,6 +101,17 @@ for (const page of PAGES) {
 
   writeFileSync(join(dist, page), out)
   console.log(`built dist/${page.padEnd(14)} app ${kb(Buffer.byteLength(app)).padStart(9)}  total ${kb(Buffer.byteLength(out))}`)
+}
+
+// Ship the image folder alongside the pages. The training page references
+// ./assets/<file>, and shows a labelled placeholder for anything still missing.
+const assets = join(root, 'assets')
+if (existsSync(assets)) {
+  cpSync(assets, join(dist, 'assets'), { recursive: true })
+  const files = readdirSync(assets).filter((f) => !f.endsWith('.md'))
+  console.log(`copied ${files.length} asset file(s)`)
+} else {
+  console.log('no assets folder, image slots will render as placeholders')
 }
 
 // GitHub Pages runs Jekyll by default, which skips files it does not recognise.

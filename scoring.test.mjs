@@ -279,8 +279,9 @@ test('no em dashes in the training or results pages', () => {
   }
 })
 
-test('no client owned branding is republished', () => {
-  // The course was rewritten precisely so none of this ends up on a public site.
+test('no source URLs or company names leak into the pages', () => {
+  // The lesson text follows the source material, but the internal site address
+  // and the company name must not appear on a public page.
   for (const f of ['training.html', 'results.html']) {
     const html = fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8')
     for (const term of ['joinhandshake', 'hedgehog-faq', 'Handshake']) {

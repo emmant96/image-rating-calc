@@ -37,31 +37,31 @@
        * A test asserts the two files agree.
        */
       const LESSON_META = [
-        { id: 'seeing', title: 'Looking before judging', questions: 2 },
-        { id: 'quality', title: 'Visual quality', questions: 3 },
-        { id: 'artifacts', title: 'AI artifacts', questions: 3 },
-        { id: 'severity', title: 'Sizing your vote', questions: 4 },
-        { id: 'overall', title: 'Reaching an overall call', questions: 3 },
+        { id: 'howtosee', title: 'How to See', questions: 2 },
+        { id: 'quality', title: 'Visual Quality', questions: 2 },
+        { id: 'realism', title: 'Realism and Artifacts', questions: 5 },
+        { id: 'artifact', title: 'AI Artifact scope', questions: 1 },
+        { id: 'severity', title: 'How to mark severity', questions: 2 },
+        { id: 'r2i', title: 'Omni R2I Elo', questions: 2 },
       ]
 
       // Question ids and short labels, in the same order the result code stores
       // answers. A test asserts this matches training.html exactly.
       const QUESTION_META = [
-        { id: 'see1', short: 'Non-photoreal style asked for' },
-        { id: 'see2', short: 'Blurred background, sharp subject' },
-        { id: 'q1', short: 'Six fingers, otherwise clean' },
-        { id: 'q2', short: 'Oversaturated, even lighting' },
-        { id: 'q3', short: 'Shadows disagree with light' },
-        { id: 'a1', short: 'Ambiguous finger damage' },
-        { id: 'a2', short: 'Garbled shop sign' },
-        { id: 'a3', short: 'Same flaw four times vs once' },
-        { id: 's1', short: 'Umbrella added, hand deformed' },
-        { id: 's2', short: 'Three artifacts vs two' },
-        { id: 's3', short: 'Torn between slightly and strongly' },
-        { id: 's4', short: 'Required element missing' },
-        { id: 'o1', short: 'Two axes each, IF favours A' },
-        { id: 'o2', short: 'Artifact vs instruction failure' },
-        { id: 'o3', short: 'Which feedback is useful' },
+        { id: 'hs1', short: 'Non-photo style asked for' },
+        { id: 'hs2', short: 'Smooth versus patchy blur' },
+        { id: 'vq1', short: 'Colours past a real camera' },
+        { id: 'vq2', short: 'Picnic boy, irregular fingers' },
+        { id: 'ra1', short: 'Strongest anatomy flag' },
+        { id: 'ra2', short: 'Fresh Bread garbled sign' },
+        { id: 'ra3', short: 'Best justification for realism' },
+        { id: 'ra4', short: 'Sci-Fi telltales' },
+        { id: 'ra5', short: 'Comic and manga realism' },
+        { id: 'ai1', short: 'Blurry background, shallow focus' },
+        { id: 'sv1', short: 'Red umbrella, deformed hand' },
+        { id: 'sv2', short: 'Three artifacts versus two' },
+        { id: 'r2i1', short: 'Person ID, clothing and pose' },
+        { id: 'r2i2', short: 'Two axes each, IF favours A' },
       ]
 
       /** Which lesson each question belongs to, derived from the counts above. */
