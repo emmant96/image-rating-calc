@@ -95,6 +95,70 @@
 
       const cx = (...c) => c.filter(Boolean).join(' ')
 
+      const same = (a, b) =>
+        Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i])
+
+      /**
+       * Signals that a submission may not be the work of the person named.
+       *
+       * None of these prove anything. A shared laptop collides on device, and
+       * two people who both scored full marks will match on answers. They are
+       * prompts to ask a question, not verdicts.
+       */
+      function findFlags(rows) {
+        const flags = []
+
+        // Several names submitted from one browser.
+        const byDevice = new Map()
+        rows.forEach((r) => {
+          if (!r.dev) return
+          if (!byDevice.has(r.dev)) byDevice.set(r.dev, new Set())
+          byDevice.get(r.dev).add(r.n)
+        })
+        byDevice.forEach((names, dev) => {
+          if (names.size > 1) {
+            flags.push({
+              kind: 'device',
+              names: [...names],
+              text: [...names].join(' and ') + ' submitted from the same browser.',
+            })
+          }
+        })
+
+        // Identical answers AND an identical retry pattern between two people.
+        for (let i = 0; i < rows.length; i++) {
+          for (let j = i + 1; j < rows.length; j++) {
+            const a = rows[i]
+            const b = rows[j]
+            if (a.n === b.n) continue
+            if (!same(a.a, b.a)) continue
+
+            // Matching correct answers mean nothing: there is only one correct
+            // set, so everyone who knows the material matches everyone else.
+            // Matching WRONG answers are the signal, because there are many
+            // ways to be wrong and picking the same one is not a coincidence.
+            const sharedMistakes = (a.c || []).reduce(
+              (n, correct, i) => (correct === 0 && (b.c || [])[i] === 0 ? n + 1 : n),
+              0
+            )
+            if (sharedMistakes === 0) continue
+
+            const retriesMatch = same(a.w, b.w)
+            flags.push({
+              kind: 'answers',
+              names: [a.n, b.n],
+              text:
+                a.n + ' and ' + b.n + ' made the same ' + sharedMistakes +
+                ' mistake' + (sharedMistakes === 1 ? '' : 's') +
+                ' and gave identical answers throughout' +
+                (retriesMatch ? ', with identical retry patterns.' : '.'),
+            })
+          }
+        }
+
+        return flags
+      }
+
       function PersonDetail({ r }) {
         // A code from before retry tracking existed carries no w or c arrays.
         // Absent data must read as unknown, never as a clean first try.
@@ -110,6 +174,10 @@
                   <span className="font-semibold text-slate-200">
                     {hasRetries ? firstTime + ' of ' + QUESTION_META.length : 'not recorded'}
                   </span>
+                </span>
+                <span>
+                  Browser:{' '}
+                  <span className="font-mono text-slate-300">{r.dev || 'not recorded'}</span>
                 </span>
                 <span>
                   Wrong picks before settling:{' '}
@@ -213,6 +281,12 @@
         }, [text])
 
         const best = rows.length ? rows[0] : null
+        const flags = useMemo(() => findFlags(rows), [rows])
+        const flaggedNames = useMemo(() => {
+          const set = new Set()
+          flags.forEach((f) => f.names.forEach((n) => set.add(n)))
+          return set
+        }, [flags])
 
         // Best attempt per person, so a retake does not crowd the leaderboard.
         const perPerson = useMemo(() => {
@@ -287,6 +361,26 @@
                 </div>
               )}
 
+              {flags.length > 0 && (
+                <div className="mt-6 rounded-2xl border border-amber-400/50 bg-amber-500/10 p-5">
+                  <div className="text-sm font-semibold text-amber-300">
+                    Worth checking ({flags.length})
+                  </div>
+                  <ul className="mt-3 space-y-2">
+                    {flags.map((f, i) => (
+                      <li key={i} className="text-sm text-amber-100">
+                        {f.text}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-xs leading-relaxed text-amber-200/80">
+                    These are prompts to ask, not proof. Two people sharing one laptop
+                    trip the browser check honestly, and a browser identifies a machine
+                    rather than a person.
+                  </p>
+                </div>
+              )}
+
               {perPerson.length > 0 && (
                 <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-800">
                   <table className="w-full min-w-[720px] text-left text-sm">
@@ -326,7 +420,17 @@
                             )}
                           >
                             <td className="px-4 py-3 text-slate-500">{i + 1}</td>
-                            <td className="px-4 py-3 font-semibold text-slate-100">{r.n}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-100">
+                              {r.n}
+                              {flaggedNames.has(r.n) && (
+                                <span
+                                  title="See the checks listed above"
+                                  className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300"
+                                >
+                                  check
+                                </span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-slate-200">
                               {r.s} / {r.t}
                             </td>

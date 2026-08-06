@@ -501,6 +501,27 @@
 
       /* ---8<--- COURSE END */
 
+      /**
+       * A random id kept in this browser's storage. It identifies the browser,
+       * not the person, so it cannot prove who sat at the keyboard. What it does
+       * show is when several submissions came from the same place, which is the
+       * signal worth looking at. Two teammates sharing one laptop will collide
+       * legitimately, so it is a prompt to ask, never proof of anything.
+       */
+      function deviceId() {
+        try {
+          let id = localStorage.getItem('hedgehog.device')
+          if (!id) {
+            id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
+            localStorage.setItem('hedgehog.device', id)
+          }
+          return id
+        } catch (err) {
+          // Private browsing refuses storage, so the submission simply carries no id.
+          return ''
+        }
+      }
+
       function encodeResult(payload) {
         const json = JSON.stringify(payload)
         const b64 = btoa(unescape(encodeURIComponent(json)))
@@ -755,6 +776,7 @@
               a: ALL_QUESTIONS.map((q) => (answers[q.id] === undefined ? -1 : answers[q.id])),
               w: ALL_QUESTIONS.map((q) => wrongTries(q, checks)),
               c: ALL_QUESTIONS.map((q) => (answers[q.id] === q.answer ? 1 : 0)),
+              dev: deviceId(),
             }),
           [name, score, total, seconds, answers, checks]
         )
