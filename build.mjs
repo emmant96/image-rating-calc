@@ -11,7 +11,7 @@
  * The result has zero external requests: it renders instantly and works offline.
  */
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { transformAsync } from '@babel/core'
@@ -81,6 +81,10 @@ for (const page of PAGES) {
   // and the training pages stay out of search results.
   const robots = /<meta name="robots"[^>]*>/.exec(html)
   const head = robots ? '\n    ' + robots[0] : ''
+  // Carry the page's own body class through. Pages differ: the calculator is
+  // dark, the training page is light, and hardcoding one would put the wrong
+  // backdrop behind the other.
+  const bodyClass = (html.match(/<body class="([^"]*)"/) || [, 'bg-neutral-100'])[1]
 
   const out = `<!doctype html>
 <html lang="en">
@@ -90,7 +94,7 @@ for (const page of PAGES) {
     <title>${title}</title>
     <style>${css}</style>
   </head>
-  <body class="bg-slate-950">
+  <body class="${bodyClass}">
     <div id="root"></div>
     <script>${react}</script>
     <script>${reactDom}</script>
@@ -105,13 +109,16 @@ for (const page of PAGES) {
 
 // Ship the image folder alongside the pages. The training page references
 // ./assets/<file>, and shows a labelled placeholder for anything still missing.
-const assets = join(root, 'assets')
-if (existsSync(assets)) {
-  cpSync(assets, join(dist, 'assets'), { recursive: true })
-  const files = readdirSync(assets).filter((f) => !f.endsWith('.md'))
-  console.log(`copied ${files.length} asset file(s)`)
+// Only the web-sized copies ship. The full resolution originals stay in the
+// repo but would add about 25 MB to every page load for no visible benefit.
+const webAssets = join(root, 'assets', 'web')
+if (existsSync(webAssets)) {
+  cpSync(webAssets, join(dist, 'assets', 'web'), { recursive: true })
+  const files = readdirSync(webAssets)
+  const bytes = files.reduce((n, f) => n + statSync(join(webAssets, f)).size, 0)
+  console.log(`copied ${files.length} image(s), ${(bytes / 1024 / 1024).toFixed(1)} MB`)
 } else {
-  console.log('no assets folder, image slots will render as placeholders')
+  console.log('no assets/web folder, image slots will render as placeholders')
 }
 
 // GitHub Pages runs Jekyll by default, which skips files it does not recognise.

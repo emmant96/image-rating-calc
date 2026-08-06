@@ -22,12 +22,12 @@
         display: block;
         padding: 3rem;
         text-align: center;
-        color: #64748b;
+        color: #737373;
         font-family: ui-sans-serif, system-ui, sans-serif;
       }
     </style>
   </head>
-  <body class="bg-slate-950">
+  <body class="bg-neutral-100">
     <div id="root"></div>
 
     <script type="text/babel" data-presets="react-classic">
@@ -45,7 +45,7 @@
 
       const TEAM = ['Deborah', 'Radical', 'Keji', 'Enny', 'Daniel', 'Mimo', 'Onaope']
 
-      // Files live in ./assets. Missing files fall back to a labelled slot.
+      // Web-sized copies live in assets/web. Originals stay in assets.
       const IMG = (file, caption) => ({ k: 'img', file, caption })
 
       const LESSONS = [
@@ -66,10 +66,11 @@
               'Visual hierarchy, what draws your eye first? Does it match the intended focus?',
               'Negative space, is the area around the subject intentional breathing room, or empty and unresolved?',
             ] },
-            IMG('thirds-desert.png', 'Same photo, side by side. With the rule-of-thirds grid overlaid you can see how the subject lines up on the intersections rather than dead center.'),
-            { k: 'p', t: 'Notice that on the right, the rock is positioned on the left gridline. Photographers generally try to use a 3 by 3 grid to compose images. The rule of thirds places your subject in the left or right third of an image, leaving the other two thirds more open. Notice that the right image evokes more vastness and space, even though technically it is simply a different crop of the same image.' },
+            IMG('thirds-desert.gif', 'Same photo, side by side. With the rule-of-thirds grid overlaid you can see how the subject lines up on the intersections rather than dead center.'),
+            { k: 'p', t: 'Notice that on the right, the rock is positioned on the left gridline. When you think of composition, you should understand that photographers generally try to use a 3 by 3 grid to compose images. The rule of thirds is a composition guideline that places your subject in the left or right third of an image, leaving the other two thirds more open. Notice that the right image evokes more vastness and space, even though technically it is simply a different crop of the same image.' },
             { k: 'callout', t: 'A composition does not have to follow textbook rules, but it should look purposeful, not accidental.' },
             IMG('thirds-bird.jpg', 'The subject sits at a rule-of-thirds intersection rather than dead center, creating tension and directing the eye naturally across the frame.'),
+            { k: 'p', t: 'Notice that the bird is sitting at the intersection point of two lines, directing the eye\u2019s attention there, and creating a composition and a beautiful image.' },
             { k: 'h', t: 'Focus, detail and clarity' },
             { k: 'callout', t: 'Blur is not always a flaw. Shallow depth of field (blurred background, sharp subject) is a legitimate photographic choice. The question is whether the blur is intentional and consistent, not whether it exists.' },
             { k: 'list', t: [
@@ -77,37 +78,46 @@
               'Depth of field, does the blur fall off naturally from the focal point, or does it appear in patches with no logic?',
               'Compression and detail loss, is fine detail (fabric weave, skin pores, grass blades) present where the image resolution should support it? Or is the image mushy in ways that look like generation failure rather than artistic choice?',
             ] },
-            IMG('dof-daffodils.png', 'The same scene shot at a wide aperture versus a narrow one. The only thing that changes is how much of the frame is in sharp focus.'),
-            IMG('dof-portrait.jpg', 'Aperture f/2 against f/22. Smooth fall-off from the focal plane is a deliberate choice, not a defect.'),
+            { k: 'p', t: 'At shallow depth of field (wide aperture, low f-number), only the subject is in focus and the background dissolves into soft blur, the photographer\u2019s choice to isolate the subject. At deep depth of field (narrow aperture, high f-number), near and far elements are all sharp at once, typical of landscape or product photography where context matters.' },
+            IMG('dof-portrait.jpg', 'Same portrait, same lighting, only the aperture changed. f/2 isolates the subject; f/22 keeps the whole forest sharp.'),
+            { k: 'p', t: 'When you are judging an AI image, pay attention to how the photo shows the background. If the background is blurred, this might be a shallow depth of field photo. In that case you would expect more light on the subject and generally more detail. However, this is not a hard rule, lighting is complex. In many AI-generated photos the background is unnaturally sharp or unevenly focused. As you continue annotating you will get a sense of this distinction.' },
+            { k: 'h', t: 'Light and colour' },
+            { k: 'p', t: 'Light is the most common source of inconsistency in AI-generated images. Train yourself to check these independently:' },
+            { k: 'table', t: [
+              ['What to check', 'What to look for'],
+              ['Light source direction', 'Do shadows fall consistently from one source? Is the light hitting faces, objects, and background from the same angle?'],
+              ['Softness', 'Harsh light (direct sun) produces sharp, defined shadows. Diffused light (overcast, studio) produces soft edges. Does the shadow quality match the apparent source?'],
+              ['Contrast', 'Are highlights blown (pure white with no detail) or shadows crushed (pure black)?'],
+              ['Colour temperature', 'Is the image consistently warm (golden, amber) or cool (blue, gray)? Mixed temperatures across a single scene are a red flag unless the lighting scenario explains it.'],
+              ['Saturation', 'Is colour intensity consistent across the image, or do some regions look over-processed while others are flat?'],
+            ] },
+            { k: 'p', t: 'Saturation should stay believable too. When colour intensity is pushed past what the scene would naturally show, it does not just look off, it can bury real detail.' },
+            IMG('saturation-landscape.jpg', 'On the right the image is oversaturated. The cranked colours obscure detail in the clouds, while the left keeps the tonal range that lets the cloud structure read.'),
           ],
           questions: [
             {
               id: 'hs1',
-              extra: true,
-              short: 'Non-photo style asked for',
-              q: 'A prompt asks for a cartoon. The output is clearly not photorealistic. How should that affect your scoring?',
+              short: 'Better note than looks good',
+              q: 'An annotator writes "this image looks good" about a landscape where the subject sits dead center with large, empty space on both sides. What is a stronger, more observable note?',
               options: [
-                'Judge it within its own style. Not being photorealistic is not a flaw here',
-                'Lower Visual Quality, since photorealistic images are always stronger',
-                'Score it as an AI artifact, because real photos do not look like cartoons',
-                'Mark a tie until a photographic version is available to compare',
+                '"It feels balanced and pleasing to look at."',
+                '"The subject sits dead center with empty thirds on both sides; the framing reads as accidental rather than purposeful."',
+                '"The composition breaks the rule of thirds, so it is wrong."',
               ],
-              answer: 0,
-              why: 'When a prompt asks for a non-photo style, do not treat "not photorealistic" as a flaw. Judge whether the image holds together within that style. AI tells like garbled text or broken hands still count regardless of style.',
+              answer: 1,
+              why: 'Right. It names the placement, describes what you see, and connects it to whether the composition looks intentional.',
             },
             {
               id: 'hs2',
-              extra: true,
-              short: 'Smooth versus patchy blur',
-              q: 'The background is soft while the subject is sharp, and the softness falls off smoothly with distance. What is this?',
+              short: 'Smooth blur fall-off',
+              q: 'A subject is sharp while the background dissolves into soft blur, and the blur falls off smoothly from the focal plane. How should you read this?',
               options: [
-                'Patchy blur, which is a generation tell',
-                'A deliberate wide-aperture choice, not a fault',
-                'A reference preservation failure',
-                'Proof the image was generated rather than photographed',
+                'An AI artifact, real photos should be sharp across the whole frame.',
+                'Likely an intentional shallow depth of field, not a flaw.',
+                'A lighting inconsistency, since blurred areas receive less light.',
               ],
               answer: 1,
-              why: 'Smooth fall-off from the focal plane signals a deliberate wide-aperture choice. Patchy blur or sharp-edged halos around the subject would be the AI tell instead.',
+              why: 'Right. Smooth fall-off from the focal plane signals a deliberate wide-aperture choice. Patchy blur or sharp-edged halos around the subject would be the AI tell instead.',
             },
           ],
         },
@@ -115,22 +125,38 @@
         {
           id: 'quality',
           title: 'Visual Quality',
-          summary: 'Contrast, colour temperature and saturation across the whole frame.',
+          summary: 'Would this hold up as a photograph?',
           blocks: [
-            { k: 'p', t: 'Visual Quality judges the whole image. Is it sharp, properly lit, and well composed? Penalise overall oversaturation, blurriness, or a washed-out look.' },
-            { k: 'h', t: 'What to check, and what to look for' },
-            { k: 'list', t: [
-              'Contrast. Are highlights blown (pure white, no detail) or shadows crushed (pure black)?',
-              'Colour temperature. Is the image consistently warm (golden, amber) or cool (blue, gray)? Mixed temperatures across one scene are a red flag unless the lighting explains it.',
-              'Saturation. Is colour intensity consistent, or do some regions look over-processed while others are flat?',
+            { k: 'p', t: 'Visual Quality is about the rendering itself, sharpness, framing, light, colour, depth of field. Set the prompt and the subject aside for a moment and ask: would this image hold up as a photograph?' },
+            { k: 'p', t: 'Visual Quality is independent of Instruction Following (did the model follow the prompt) and Absence of AI Artifacts (did it hallucinate impossible content). A photo can perfectly match the prompt and still lose on Visual Quality if it is washed out, oversaturated, or unevenly focused.' },
+            { k: 'callout', t: 'Visual Quality judges the whole image, is it sharp, well-lit, well-composed? AI Artifacts are local tells, bad hands, garbled text, waxy or over-smooth skin. They are separate axes: one bad hand is an AI Artifacts problem, not a Visual Quality loss. Only lower Visual Quality when the whole image looks soft, blurry, or washed out.' },
+            { k: 'h', t: 'What to check' },
+            { k: 'cards', t: [
+              ['I', 'Composition and framing', 'Subject placement, framing scale, visual hierarchy. The shot should look purposeful, not accidental. Centered is not always wrong, but ask whether the framing was a choice.'],
+              ['II', 'Focus and depth of field', 'Is the intended subject sharp? Does the blur fall off naturally from the focal point, or in patches? Patchy or haloed blur is an AI tell.'],
+              ['III', 'Light and shadow', 'Where is the light source? Do all shadows fall consistently from it? Does shadow softness match the apparent light type, harsh sun versus diffused?'],
+              ['IV', 'Colour and saturation', 'Are colours balanced or pushed past what a real camera would produce? Mixed colour temperatures across one scene are a red flag unless the lighting explains them.'],
+              ['V', 'Contrast and exposure', 'Are highlights blown to pure white? Are shadows crushed to pure black? Real photos retain detail at both ends unless intentionally stylised.'],
+              ['VI', 'Detail and sharpness', 'At the image\u2019s resolution, is fine detail (fabric, skin, foliage) present where it should be, or mushy in ways that look like generation failure?'],
             ] },
-            IMG('saturation-tuscany.jpg', 'The same landscape, normal on the left and with saturation cranked on the right.'),
-            { k: 'h', t: 'Where is the light coming from?' },
-            { k: 'p', t: 'When you assess on this dimension, ask yourself: where is the light source? Where are the shadows? Where is the blur supposed to be?' },
-            IMG('lighting-portrait.jpg', 'Directional light with shadows that agree on a single source.'),
-            IMG('oversaturation-cinema.jpg', 'Cranked saturation and punchy colours look dramatic, but they are a Visual Quality loss and a common AI tell. The tells here: cloud detail in a sky that should be dark, lights perfectly illuminated, coat shadows falling the wrong way, and the car blurry despite shallow depth of field.'),
+            { k: 'h', t: 'Light and colour' },
+            { k: 'p', t: 'A well-lit image does not need to be technically perfect, it needs to be internally consistent. Rembrandt lighting is a classic example: one clear light source, the unlit side falls into shadow, and everything in the scene agrees with that source.' },
+            IMG('rembrandt-lighting.jpg', 'Rembrandt lighting. One light source, shadow falling consistently. Shadow direction, skin highlights, and background tone all agree.'),
+            { k: 'h', t: 'Worked example, oversaturation' },
+            { k: 'p', t: 'In the image below, ask: where is the light source? Where are the shadows? Where is the blur supposed to be?' },
+            IMG('oversaturation-example.jpg', 'Cranked saturation and punchy colours look dramatic, but they are a Visual Quality loss and a common AI tell.'),
+            { k: 'list', t: [
+              'Cloud detail in a sky that should be dark.',
+              'Lights perfectly illuminated.',
+              'Coat shadows fall the wrong way.',
+              'Car is blurry despite shallow depth of field.',
+            ] },
             { k: 'p', t: 'When colours feel pushed past what a real camera would produce, the image likely has a rendering artifact. Score it down on Visual Quality, and watch for Absence of AI Artifacts (the "filter-applied" look) as a secondary hit.' },
-            IMG('composition-bike.jpg', 'Negative space used deliberately rather than left empty and unresolved.'),
+            { k: 'h', t: 'Worked example, blur and distortion' },
+            { k: 'p', t: 'Prompt: A mixed-race family having a picnic in a park. Both look nearly identical at a glance. Zoom into the boy.' },
+            IMG('picnic-a.jpg', 'Response A. Fingers and toes look slightly irregular. Artifact or angle?'),
+            IMG('picnic-b.jpg', 'Response B. Hands and feet are clean. Prefer B.'),
+            { k: 'callout', t: 'You do not need to name the specific artifact. Ambiguous extremity distortion is a known AI tell, pick the cleaner response, do not tie.' },
             { k: 'h', t: 'Watch out for' },
             { k: 'list', t: [
               'Oversaturation, unnaturally punchy or over-processed colours.',
@@ -152,19 +178,19 @@
                 'Person ID Preservation, saturation changes who the person is',
               ],
               answer: 0,
-              why: 'Oversaturation and unnaturally even lighting are a Visual Quality loss, and the "filter-applied" look is also a tell under Absence of AI Artifacts.',
+              why: 'Right. Oversaturation and unnaturally even lighting are a Visual Quality loss, and the "filter-applied" look is also a tell under Absence of AI Artifacts.',
             },
             {
               id: 'vq2',
               short: 'Picnic boy, irregular fingers',
-              q: 'In the picnic example, Response A shows slightly irregular fingers and toes on the boy while Response B\'s hands and feet look clean. The two are otherwise near-identical. What\'s the right move?',
+              q: 'In the picnic example, Response A shows slightly irregular fingers and toes on the boy while Response B\u2019s hands and feet look clean. The two are otherwise near-identical. What\u2019s the right move?',
               options: [
                 'Prefer Response B, ambiguous extremity distortion is a known AI tell, so pick the cleaner one',
                 'Mark them tied, the difference is too small to call',
                 'Prefer Response A, the irregular fingers are likely just the camera angle',
               ],
               answer: 0,
-              why: 'You don\'t need to name the exact artifact. Ambiguous extremity distortion is a known AI tell, pick the cleaner response rather than tying.',
+              why: 'Correct. You don\u2019t need to name the exact artifact. Ambiguous extremity distortion is a known AI tell, pick the cleaner response rather than tying.',
             },
           ],
         },
@@ -172,35 +198,39 @@
         {
           id: 'realism',
           title: 'Realism and Artifacts',
-          summary: 'The predictable ways generators fail, and how to describe them.',
+          summary: 'The predictable failures, and how to describe them.',
           blocks: [
             { k: 'p', t: 'AI image generators fail in predictable ways. Knowing the patterns lets you spot problems quickly, and describe them precisely enough to support a rating.' },
-            { k: 'h', t: 'Worked example, editing for lighting and shadow realism' },
-            { k: 'p', t: 'Prompt: Can you make this bicycle look like a vintage cream city bike with a small wicker front basket? Soften the lighting a little and make it feel like an early morning street scene.' },
+            { k: 'h', t: 'Example, editing for lighting and shadow realism' },
+            { k: 'p', t: 'In an image-editing task, the model gets an original photo plus a prompt asking for changes, and you compare the edited outputs, here on how believably each handles light and shadow.' },
+            { k: 'callout', t: 'Prompt: Can you make this bicycle look like a vintage cream city bike with a small wicker front basket? Soften the lighting a little and make it feel like an early morning street scene.' },
             IMG('bike-original.jpg', 'Original.'),
-            IMG('bike-edit-a.jpg', 'Edit A.'),
-            IMG('bike-edit-b.jpg', 'Edit B, fewer artifacts.'),
+            IMG('bike-edit-a.jpg', 'Edit A. A pedal is missing, and the ground shadow does not line up with any light source.'),
+            IMG('bike-edit-b.jpg', 'Edit B, fewer artifacts. Low directional morning light, a dappled shadow across the wall, and a proper contact shadow.'),
             { k: 'p', t: 'Edit B wins. Low directional morning light casts a dappled shadow across the wall, and the bike sits on a proper contact shadow, a believable early-morning street, which is what the prompt asked for. Edit A has two tells: a pedal is missing, and the ground shadow does not line up with any light source (the wall is lit flat, no texture). The lighting was softened by flattening it, an "AI-flat" studio shot, not a street scene.' },
             { k: 'h', t: 'Anatomy, texture and realism' },
+            { k: 'p', t: 'These are the areas where generation artifacts concentrate most.' },
             { k: 'list', t: [
               'Faces. Proportions: eye spacing, nose-to-mouth distance, jawline shape. Eyes: are pupils the same size? Are catchlights consistent between eyes? Skin: overly smooth or waxy skin is a common generation tell, real skin has pores, variation, and subtle texture.',
               'Hands. The most common failure point. Check finger count, finger length relative to palm, visible knuckles, natural overlap between fingers. Fused or missing fingers are immediate flags.',
-              'Bodies and limbs. Limb length proportional to torso, joints bending at anatomically plausible points, clothing that drapes, folds and creases with the body underneath it.',
+              'Bodies and limbs. Limb length proportional to torso, joints bending at anatomically plausible points, and clothing that drapes, folds and creases with the body underneath it.',
               'Surfaces and materials. Real materials have characteristic texture: skin has pores, fabric has weave, hair has individual strands, metal reflects. Over-smooth surfaces, tiled patterns, and loss of fine detail are all artifact signals.',
             ] },
-            IMG('hand-artifact.jpg', 'A typical AI hand failure: wrong finger count, unnatural fusing, and implausible joint structure. This is what to scan for before rating anatomy.'),
+            IMG('artifact-hand.jpg', 'A typical AI hand failure, wrong finger count, unnatural fusing, and implausible joint structure. This is what to scan for before rating anatomy.'),
             { k: 'h', t: 'AI artifact patterns' },
-            { k: 'p', t: 'Artifacts cluster into four categories: anatomy failures, texture problems, text rendering, and object and scene inconsistencies. Text rendering and structural anatomy are the two artifact types that show up most in complex prompts.' },
-            IMG('panda-garbled-text.jpg', 'Prompt requested a Chinese speech bubble saying "Look! Panda!". The model produced garbled pseudo-characters instead of legible text.'),
-            IMG('centaur.jpg', 'The model has no real understanding of how two body types should connect, so the anatomy collapses at the join.'),
+            { k: 'p', t: 'Artifacts cluster into four categories: anatomy failures, texture problems, text rendering, and object and scene inconsistencies. Anatomy failures cover wrong finger counts, fused or extra limbs, distorted facial features, mismatched eye sizes and impossible body proportions. These are the easiest to spot and the hardest to miss once you know to look.' },
+            { k: 'p', t: 'Text rendering and structural anatomy are the two artifact types that show up most in complex prompts. The image below was generated with a Chinese-language speech bubble, and the characters are distorted and unreadable, a failure mode that is especially common with non-Latin scripts.' },
+            IMG('artifact-garbled-text.jpg', 'Prompt requested a Chinese speech bubble saying "Look! Panda!". The model produced garbled pseudo-characters instead of legible text.'),
+            { k: 'p', t: 'Structural failures happen when a model cannot maintain anatomical logic across a complex body. This centaur was generated by Stable Diffusion, and the human-to-horse transition is incoherent, with mismatched proportions and impossible joint geometry.' },
+            IMG('artifact-centaur.jpg', 'The model has no real understanding of how two body types should connect, so the anatomy collapses at the join.'),
             { k: 'h', t: 'Describing what you see' },
             { k: 'p', t: 'Ratings are only useful if the justification supports them. Grounded descriptions reference what is actually in the image, not how it makes you feel.' },
             { k: 'table', t: [
               ['Weak (subjective)', 'Strong (observable)'],
               ['"This looks off"', '"The shadow on the left wall falls at a different angle than the shadow under the chair"'],
               ['"The hands look weird"', '"The right hand has six fingers; the thumb and index finger appear fused"'],
-              ['"Image A is better quality"', '"Image A has sharper hair detail and consistent shadow direction; Image B\'s background is smeared and the subject\'s left arm is unnaturally elongated"'],
-              ['"B feels more realistic"', '"B has more consistent skin texture and natural fabric draping; A has waxy skin and a visible seam at the subject\'s collar"'],
+              ['"Image A is better quality"', '"Image A has sharper hair detail and consistent shadow direction; Image B\u2019s background is smeared and the subject\u2019s left arm is unnaturally elongated"'],
+              ['"B feels more realistic"', '"B has more consistent skin texture and natural fabric draping; A has waxy skin and a visible seam at the subject\u2019s collar"'],
             ] },
             { k: 'callout', t: 'When writing a justification: name the element, describe what you observe, and connect it to the axis you are rating.' },
           ],
@@ -208,12 +238,12 @@
             {
               id: 'ra1',
               short: 'Strongest anatomy flag',
-              q: 'You\'re rating an AI-generated portrait. Which observation is the strongest anatomy-based artifact flag?',
+              q: 'You\u2019re rating an AI-generated portrait. Which observation is the strongest anatomy-based artifact flag?',
               options: [
                 'The subject is smiling with their mouth slightly open',
                 'The right hand shows six fingers, and the thumb appears fused to the index finger',
                 'The background is slightly out of focus',
-                'The subject\'s shirt is a solid color',
+                'The subject\u2019s shirt is a solid color',
               ],
               answer: 1,
               why: 'Finger count and fusing are classic anatomy failures, the clearest, most defensible artifact call.',
@@ -221,13 +251,8 @@
             {
               id: 'ra2',
               short: 'Fresh Bread garbled sign',
-              q: 'A prompt asks for a storefront sign that reads "Fresh Bread." The generated image shows a sign with letter-like shapes that don\'t spell anything readable. Which artifact category is this?',
-              options: [
-                'Anatomy failure',
-                'Object & scene inconsistency',
-                'Text rendering',
-                'Texture problem',
-              ],
+              q: 'A prompt asks for a storefront sign that reads "Fresh Bread." The generated image shows a sign with letter-like shapes that don\u2019t spell anything readable. Which artifact category is this?',
+              options: ['Anatomy failure', 'Object & scene inconsistency', 'Text rendering', 'Texture problem'],
               answer: 2,
               why: 'Garbled or unreadable letters are a text rendering failure, especially common when specific words are requested.',
             },
@@ -237,9 +262,9 @@
               q: 'Which justification best supports a lower rating on realism?',
               options: [
                 'Image A just feels off compared to Image B',
-                'Image A\'s cast shadow falls to the left of the subject while the window light comes from the left, and the subject\'s left hand has fused fingers',
+                'Image A\u2019s cast shadow falls to the left of the subject while the window light comes from the left, and the subject\u2019s left hand has fused fingers',
                 'Image A is clearly AI-generated',
-                'Image A doesn\'t look as good as Image B',
+                'Image A doesn\u2019t look as good as Image B',
               ],
               answer: 1,
               why: 'Grounded. It names the elements, describes the observation, and ties it to realism.',
@@ -250,7 +275,7 @@
               q: 'The prompt asks to generate an imaginary scene in a Sci-Fi movie. The response shows a flying submarine in the sky, an empty street with garbled store signage, and highly intense colors overall. Which of the details are telltales when evaluating the realism / less AI Generated dimension?',
               options: [
                 'Flying submarine, no submarines can fly in reality',
-                'Empty street with garbled store signage, the signs aren\'t human-readable',
+                'Empty street with garbled store signage, the signs aren\u2019t human-readable',
                 'Intense colors overall, they look unnatural',
                 'All of the above',
               ],
@@ -263,7 +288,7 @@
               q: 'The prompt asks to generate a comic / manga styled image in a school. Which statement is correct when evaluating the realism dimension?',
               options: [
                 'Comic / manga is unreal by definition, so the realism dimension is not evaluable',
-                'Look for unrealistic objects that don\'t fit in the overall setting',
+                'Look for unrealistic objects that don\u2019t fit in the overall setting',
                 'Computer-rendered images are more real than hand sketches',
                 'All of the above',
               ],
@@ -275,22 +300,20 @@
 
         {
           id: 'artifact',
-          title: 'AI Artifact, and its scope',
-          summary: 'Why it is a separate axis from Visual Quality.',
+          title: 'AI Artifact',
+          summary: 'A scope, not a catch-all for anything that looks wrong.',
           blocks: [
             { k: 'p', t: 'In T2I tasks, an AI artifact is the still image a model generates from a text prompt. Two such images from the same prompt are shown side by side, and your job is to rate each one on four axes. One of those axes, Absence of AI Artifacts, has a specific scope: it covers generation tells visible in the image, not every quality issue. Understanding this scope is what separates a calibrated rater from one who double-penalizes.' },
             { k: 'h', t: 'Why it is its own axis' },
             { k: 'p', t: 'An image can be technically sharp, well-composed, and beautifully lit, and still contain serious artifacts. The reverse is also true: an image can have one bad hand and otherwise be excellent. If you treat artifacts as a general quality problem, you will count the same flaw twice, once on AI Artifacts and again on Visual Quality. That inflates the penalty beyond what the defect actually warrants.' },
             { k: 'callout', t: 'AI Artifacts are local, generation-specific tells: bad fingers, garbled text, tiling, floating objects. Visual Quality judges the whole image: sharpness, composition, lighting. A single bad hand is an AI Artifacts finding. Only lower Visual Quality when the whole image looks soft, blurry, or washed out.' },
             { k: 'h', t: 'Four classes to check on every T2I image' },
-            { k: 'list', t: [
-              'Anatomy failures',
-              'Texture problems',
-              'Text rendering',
-              'Object and scene inconsistencies',
-            ] },
+            { k: 'p', t: 'Check each class in order on both images before you score: anatomy failures, texture problems, text rendering, and object and scene inconsistencies.' },
             { k: 'h', t: 'Operational test' },
-            { k: 'p', t: 'Ask one question for each element you inspect: is what I see explained by the prompt, or does it look like the model failed to generate it correctly? A shadow falling the wrong way is a generation failure. A blurry background in a shallow-focus portrait is composition, that is Visual Quality. Text that looks like it belongs to a different language than the prompt requested is an artifact. Text that is readable but in a different font than you would prefer is an aesthetic call, not an artifact.' },
+            { k: 'callout', t: 'Ask one question for each element you inspect: is what I see explained by the prompt, or does it look like the model failed to generate it correctly?' },
+            { k: 'p', t: 'A shadow falling the wrong way is a generation failure. A blurry background in a shallow-focus portrait is composition, that is Visual Quality. Text that looks like it belongs to a different language than the prompt requested is an artifact. Text that is readable but in a different font than you would prefer is an aesthetic call, not an artifact.' },
+            { k: 'h', t: 'Scope: T2I only' },
+            { k: 'p', t: 'This axis applies to T2I comparison tasks only. The fellow receives two still images from the same prompt and scores each across Overall Preference, Instruction Following, Visual Quality, and Absence of AI Artifacts.' },
           ],
           questions: [
             {
@@ -315,28 +338,39 @@
           title: 'How to mark severity',
           summary: 'Size the vote to the gap, not to your confidence.',
           blocks: [
-            { k: 'p', t: 'Your vote strength should reflect how big the difference between the two images really is, not how confident you feel. You will use this five-point scale for Overall Preference and for each dimension you score: Strongly Prefer A, Slightly Prefer A, Tie, Slightly Prefer B, Strongly Prefer B.' },
+            { k: 'p', t: 'Your vote strength should reflect how big the difference between the two images really is, not how confident you feel. This guide shows when to choose Tie, Slightly, or Strongly, with two worked comparisons.' },
+            { k: 'h', t: 'The rating scale' },
+            { k: 'p', t: 'You will use this five-point scale for Overall Preference and for each dimension you score, instruction following, reference preservation, visual quality, and AI artifacts. It works the same whether the task is omni-r2i-elo, text-to-image-compare, or omni-elo.' },
+            { k: 'table', t: [
+              ['Vote', 'Means'],
+              ['Strongly Prefer A', 'A is clearly and significantly stronger.'],
+              ['Slightly Prefer A', 'A has a noticeable but small edge.'],
+              ['Tie', 'Truly equal, rare.'],
+              ['Slightly Prefer B', 'B has a noticeable but small edge.'],
+              ['Strongly Prefer B', 'B is clearly and significantly stronger.'],
+            ] },
             { k: 'h', t: 'Slightly prefer' },
             { k: 'p', t: 'The two images are broadly comparable and the call takes some deliberation. Usually one of: you can name the one detail that sets one response apart from the other, both look similar and the only difference shows up on a close look, or another rater could reasonably land the other way. Example: on AI artifacts, Response A has 3 visible artifacts and Response B has 2, just a one-artifact gap, so Slightly Prefer B.' },
             { k: 'h', t: 'Strongly prefer' },
-            { k: 'p', t: 'The winner is obvious on the first look. Usually one of: the losing image has a jarring failure a casual viewer would immediately flag (bad anatomy, a required element missing or wrong, the reference style broken, an obvious artifact), or you would not second-guess it, and you would not expect another rater to land differently.' },
+            { k: 'p', t: 'The winner is obvious on the first look. Usually one of: the losing image has a jarring failure a casual viewer would immediately flag (bad anatomy, a required element missing or wrong, the reference style broken, an obvious artifact), or you would not second-guess it, and you would not expect another rater to land differently. Example: Response A has one clear problem you would spot right away, say a badly deformed hand, while Response B looks clean, so Strongly Prefer B.' },
             { k: 'h', t: 'Tie' },
             { k: 'p', t: 'Neither image is meaningfully better after a careful look. Truly rare. Example: both responses have the same 2 artifacts at the same severity and nothing else separates them, so Tie, and still name what you compared and why it came out even.' },
             { k: 'callout', t: 'Rule of thumb. Imagine someone glanced at both images. Slightly, they would pick the winner when you ask them to choose. Strongly, they would point out the problem unprompted.' },
+            { k: 'p', t: 'A "Strongly" winner can still have its own small flaws, what matters is whether the gap between the two is obvious. And a tie on one dimension does not mean the images are tied overall.' },
             { k: 'h', t: 'Example 1, a Slightly call' },
-            { k: 'p', t: 'Editing prompt: add the protective headgear a construction worker wears on site, change nothing else.' },
+            { k: 'callout', t: 'Editing prompt: add the protective headgear a construction worker wears on site, change nothing else.' },
             IMG('hardhat-reference.jpg', 'Reference.'),
             IMG('hardhat-output-a.jpg', 'Output A.'),
             IMG('hardhat-output-b.jpg', 'Output B.'),
-            { k: 'p', t: 'What you see: both outputs add the hard hat cleanly. Both also subtly flatten the man\'s head shape, which the prompt did not ask for, so that flaw appears on both sides and does not separate them. The real difference: Output B adds three unnecessary white lines on his forehead; Output A does not.' },
-            { k: 'p', t: 'Overall Preference, Slightly Prefer A. Both images follow the core instruction and are fully usable. The only real separator is B\'s small unrequested detail (the white lines), which you notice on a close look. The shared head-shape change does not decide the call, so the gap is real but minor, making it a Slightly, not a Strongly.' },
+            { k: 'p', t: 'What you see: both outputs add the hard hat cleanly. Both also subtly flatten the man\u2019s head shape, which the prompt did not ask for, so that flaw appears on both sides and does not separate them. The real difference: Output B adds three unnecessary white lines on his forehead; Output A does not.' },
+            { k: 'p', t: 'Overall Preference, Slightly Prefer A. Both images follow the core instruction and are fully usable. The only real separator is B\u2019s small unrequested detail (the white lines), which you notice on a close look. The shared head-shape change does not decide the call, so the gap is real but minor, making it a Slightly, not a Strongly.' },
             { k: 'h', t: 'Example 2, a Strongly call' },
-            { k: 'p', t: 'Editing prompt: Add a large, hyper-realistic human eyeball resting on the wooden floor in the immediate foreground of the hallway, centered on the floorboards and facing upward toward the ceiling, as if it has fallen from the artwork at the end.' },
+            { k: 'callout', t: 'Editing prompt: Add a large, hyper-realistic human eyeball resting on the wooden floor in the immediate foreground of the hallway, centered on the floorboards and facing upward toward the ceiling, as if it has fallen from the artwork at the end.' },
             IMG('eyeball-reference.jpg', 'Reference.'),
             IMG('eyeball-output-a.jpg', 'Output A.'),
             IMG('eyeball-output-b.jpg', 'Output B.'),
-            { k: 'p', t: 'What you see: Output A adds the eyeball exactly as described, large, hyper-realistic, on the floorboards, and preserves the reference\'s style and everything else. Output B recolors the eyeball and shifts the artistic style, so it looks out of place and creepy rather than blending in, and it even colorizes the man\'s eye for no reason, changes nobody asked for.' },
-            { k: 'p', t: 'Overall Preference, Strongly Prefer A. B breaks the reference\'s style and adds several unrequested changes that are obvious at a glance, while A follows the prompt cleanly and preserves the source. The prompt-writer would spot the difference immediately, a big, clear gap, so it is a Strongly.' },
+            { k: 'p', t: 'What you see: Output A adds the eyeball exactly as described, large, hyper-realistic, on the floorboards, and preserves the reference\u2019s style and everything else. Output B recolors the eyeball and shifts the artistic style, so it looks out of place and creepy rather than blending in, and it even colorizes the man\u2019s eye for no reason, changes nobody asked for.' },
+            { k: 'p', t: 'Overall Preference, Strongly Prefer A. B breaks the reference\u2019s style and adds several unrequested changes that are obvious at a glance, while A follows the prompt cleanly and preserves the source. The prompt-writer would spot the difference immediately, a big, clear gap, so it is a Strongly.' },
             { k: 'h', t: 'The most common mistake: under-calling' },
             { k: 'p', t: 'Fellows tend to default to Slightly to play it safe. Before you settle for a Slightly, check the three cases below, each one is a Strongly.' },
             { k: 'list', t: [
@@ -350,30 +384,18 @@
             {
               id: 'sv1',
               short: 'Red umbrella, deformed hand',
-              q: 'The prompt asked to add a red umbrella to the person\'s hand. Response A adds it cleanly and everything else looks natural. Response B adds the umbrella too, but the person\'s hand is clearly deformed. Nothing else separates the two. What\'s your Overall Preference?',
-              options: [
-                'Strongly Prefer A',
-                'Slightly Prefer A',
-                'Tie',
-                'Slightly Prefer B',
-                'Strongly Prefer B',
-              ],
+              q: 'The prompt asked to add a red umbrella to the person\u2019s hand. Response A adds it cleanly and everything else looks natural. Response B adds the umbrella too, but the person\u2019s hand is clearly deformed. Nothing else separates the two. What\u2019s your Overall Preference?',
+              options: ['Strongly Prefer A', 'Slightly Prefer A', 'Tie', 'Slightly Prefer B', 'Strongly Prefer B'],
               answer: 0,
-              why: 'One side carries the only differentiating flaw and it\'s visible at a glance, that\'s a Strongly.',
+              why: 'Correct. One side carries the only differentiating flaw and it\u2019s visible at a glance, that\u2019s a Strongly.',
             },
             {
               id: 'sv2',
               short: 'Three artifacts versus two',
-              q: 'Both responses follow the prompt and look good overall. Only on a close look do you notice Response A has 3 minor artifacts (a couple of soft, slightly-off edges) and Response B has 2 of the same kind. Nothing else separates them. What\'s your Overall Preference?',
-              options: [
-                'Strongly Prefer A',
-                'Slightly Prefer A',
-                'Tie',
-                'Slightly Prefer B',
-                'Strongly Prefer B',
-              ],
+              q: 'Both responses follow the prompt and look good overall. Only on a close look do you notice Response A has 3 minor artifacts (a couple of soft, slightly-off edges) and Response B has 2 of the same kind. Nothing else separates them. What\u2019s your Overall Preference?',
+              options: ['Strongly Prefer A', 'Slightly Prefer A', 'Tie', 'Slightly Prefer B', 'Strongly Prefer B'],
               answer: 3,
-              why: 'A one-artifact gap you only see on close inspection is a small but real edge, Slightly Prefer B.',
+              why: 'Correct. A one-artifact gap you only see on close inspection is a small but real edge, Slightly Prefer B.',
             },
           ],
         },
@@ -396,7 +418,7 @@
               'Review the reference image. Ask yourself, what must carry over?',
               'Study and zoom into every image. Look at hands, faces, text, and edges. Hands can be blurred or you may see an extra finger.',
               'Score the six dimensions independently. Some images will win on visual quality but lose on Person ID Preservation. Do not assume Response B wins across all categories.',
-              'Pick a winner. A tie on an attribute is rare, reserve it only for when two responses genuinely perform the same on that one dimension.',
+              'Pick a winner. A tie on an attribute is rare, reserve it only for when two responses genuinely perform the same on that one dimension. For Overall Preference, score every attribute first, then let the count decide.',
             ] },
             { k: 'callout', t: 'Annotations that tie-spam, or select "slightly prefer X" across all categories, may get a lower quality score, because you have not put in the effort to clearly distinguish the axes.' },
             { k: 'h', t: 'Watch out for' },
@@ -416,8 +438,8 @@
               short: 'Person ID, clothing and pose',
               q: 'A reference person now wears different clothing and strikes a new pose, but their facial structure and features still clearly read as the same individual. How should you score Person ID Preservation?',
               options: [
-                'ID is preserved, clothing and pose don\'t define identity, the recognizable face does',
-                'ID is broken, the changed clothing and pose mean the person wasn\'t preserved',
+                'ID is preserved, clothing and pose don\u2019t define identity, the recognizable face does',
+                'ID is broken, the changed clothing and pose mean the person wasn\u2019t preserved',
                 'It depends on Visual Quality, a crisp image always preserves ID',
               ],
               answer: 0,
@@ -500,22 +522,24 @@
         return (
           <figure className="mt-5">
             {failed ? (
-              <div className="flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/40 p-6 text-center">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <div className="flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-neutral-400 bg-white p-6 text-center">
+                <div className="text-xs font-semibold uppercase tracking-wider text-neutral-9000">
                   Image not added yet
                 </div>
-                <code className="mt-2 text-xs text-slate-400">assets/{file}</code>
+                <code className="mt-2 text-xs text-neutral-600">assets/{file}</code>
               </div>
             ) : (
-              <img
-                src={'./assets/' + file}
-                alt={caption}
-                onError={() => setFailed(true)}
-                className="w-full rounded-xl border border-slate-800"
-              />
+              <div className="rounded-xl bg-neutral-300 p-3">
+                <img
+                  src={'./assets/web/' + file}
+                  alt={caption}
+                  onError={() => setFailed(true)}
+                  className="mx-auto block max-h-[70vh] w-auto max-w-full rounded-lg"
+                />
+              </div>
             )}
             {caption && (
-              <figcaption className="mt-2 text-xs leading-relaxed text-slate-500">{caption}</figcaption>
+              <figcaption className="mt-2 text-xs leading-relaxed text-neutral-9000">{caption}</figcaption>
             )}
           </figure>
         )
@@ -524,24 +548,24 @@
       function Block({ block }) {
         if (block.k === 'img') return <Figure file={block.file} caption={block.caption} />
         if (block.k === 'h')
-          return <h3 className="mt-7 text-lg font-semibold text-slate-100">{block.t}</h3>
+          return <h3 className="mt-7 text-lg font-semibold text-neutral-900">{block.t}</h3>
         if (block.k === 'p')
-          return <p className="mt-3 text-[15px] leading-relaxed text-slate-300">{block.t}</p>
+          return <p className="mt-3 text-[15px] leading-relaxed text-neutral-700">{block.t}</p>
         if (block.k === 'table')
           return (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[520px] border-collapse text-left text-sm">
                 <tbody>
                   {block.t.map((row, i) => (
-                    <tr key={i} className={i === 0 ? 'bg-slate-900/80' : 'border-t border-slate-800'}>
+                    <tr key={i} className={i === 0 ? 'bg-neutral-200' : 'border-t border-neutral-300'}>
                       {row.map((cell, j) => (
                         <td
                           key={j}
                           className={cx(
                             'px-3 py-2.5 align-top',
-                            i === 0 ? 'text-xs font-bold uppercase tracking-wider text-slate-400' : 'text-slate-300',
-                            i > 0 && j === 0 ? 'text-rose-300' : '',
-                            i > 0 && j === 1 ? 'text-emerald-300' : ''
+                            i === 0 ? 'text-xs font-bold uppercase tracking-wider text-neutral-600' : 'text-neutral-700',
+                            i > 0 && j === 0 ? 'text-rose-700' : '',
+                            i > 0 && j === 1 ? 'text-emerald-700' : ''
                           )}
                         >
                           {cell}
@@ -557,7 +581,7 @@
           return (
             <ul className="mt-3 space-y-2">
               {block.t.map((item, i) => (
-                <li key={i} className="flex gap-3 text-[15px] leading-relaxed text-slate-300">
+                <li key={i} className="flex gap-3 text-[15px] leading-relaxed text-neutral-700">
                   <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
                   <span>{item}</span>
                 </li>
@@ -565,7 +589,7 @@
             </ul>
           )
         return (
-          <div className="mt-5 rounded-xl border-l-4 border-indigo-400/70 bg-indigo-500/10 p-4 text-[15px] leading-relaxed text-slate-200">
+          <div className="mt-5 rounded-xl border-l-4 border-indigo-500 bg-indigo-50 p-4 text-[15px] leading-relaxed text-neutral-800">
             {block.t}
           </div>
         )
@@ -575,18 +599,18 @@
         const revealed = checked !== undefined
         const right = revealed && checked === q.answer
         return (
-          <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+          <div className="mt-5 rounded-2xl border border-neutral-300 bg-white p-5">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-9000">
                 Knowledge check
               </span>
               {q.extra && (
-                <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                <span className="rounded bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-600">
                   extra practice
                 </span>
               )}
             </div>
-            <p className="mt-3 text-[15px] font-medium leading-relaxed text-slate-100">{q.q}</p>
+            <p className="mt-3 text-[15px] font-medium leading-relaxed text-neutral-900">{q.q}</p>
 
             <div role="radiogroup" className="mt-4 space-y-2">
               {q.options.map((opt, i) => {
@@ -602,18 +626,18 @@
                     className={cx(
                       'flex w-full items-start gap-3 rounded-xl px-4 py-3 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
                       isAnswer
-                        ? 'bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/50'
+                        ? 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-500'
                         : isWrongPick
-                          ? 'bg-rose-500/20 text-rose-100 ring-1 ring-rose-400/50'
+                          ? 'bg-rose-100 text-rose-900 ring-1 ring-rose-500'
                           : active
                             ? 'bg-indigo-500 text-white'
-                            : 'bg-slate-800/60 text-slate-300 hover:bg-slate-800'
+                            : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                     )}
                   >
                     <span
                       className={cx(
                         'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
-                        active || isAnswer ? 'border-current' : 'border-slate-500'
+                        active || isAnswer ? 'border-current' : 'border-neutral-400'
                       )}
                     >
                       {(active || isAnswer) && <span className="h-2 w-2 rounded-full bg-current" />}
@@ -631,21 +655,21 @@
                 className={cx(
                   'rounded-xl px-4 py-2 text-sm font-semibold transition',
                   value === undefined
-                    ? 'cursor-not-allowed bg-slate-800 text-slate-600'
+                    ? 'cursor-not-allowed bg-neutral-200 text-neutral-400'
                     : 'bg-indigo-500 text-white hover:bg-indigo-400'
                 )}
               >
                 Check answer
               </button>
               {revealed && (
-                <span className={cx('text-sm font-semibold', right ? 'text-emerald-400' : 'text-rose-400')}>
+                <span className={cx('text-sm font-semibold', right ? 'text-emerald-600' : 'text-rose-600')}>
                   {right ? 'Correct' : 'Not quite, try again'}
                 </span>
               )}
             </div>
 
             {revealed && right && (
-              <p className="mt-3 rounded-xl bg-emerald-500/10 p-3 text-sm leading-relaxed text-emerald-200">
+              <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm leading-relaxed text-emerald-900">
                 {q.why}
               </p>
             )}
@@ -658,8 +682,8 @@
         const mins = LESSONS.reduce((n, l) => n + estimateMinutes(l), 0)
         return (
           <div className="mx-auto max-w-2xl">
-            <h1 className="text-3xl font-bold text-slate-50">Image rating training</h1>
-            <p className="mt-3 text-[15px] leading-relaxed text-slate-400">
+            <h1 className="text-3xl font-bold text-neutral-900">Image rating training</h1>
+            <p className="mt-3 text-[15px] leading-relaxed text-neutral-600">
               Six lessons, each ending in knowledge checks. Use Check answer as you go.
               On the last page you submit and see your score.
             </p>
@@ -669,14 +693,14 @@
                 ['Questions', ALL_QUESTIONS.length],
                 ['Suggested', '~' + mins + ' min'],
               ].map(([k, v]) => (
-                <div key={k} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-center">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">{k}</div>
-                  <div className="mt-1 text-xl font-semibold text-slate-100">{v}</div>
+                <div key={k} className="rounded-2xl border border-neutral-300 bg-white p-4 text-center">
+                  <div className="text-xs uppercase tracking-wider text-neutral-9000">{k}</div>
+                  <div className="mt-1 text-xl font-semibold text-neutral-900">{v}</div>
                 </div>
               ))}
             </div>
-            <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-              <label className="text-sm font-semibold text-slate-200">Who is taking this?</label>
+            <div className="mt-8 rounded-2xl border border-neutral-300 bg-white p-6">
+              <label className="text-sm font-semibold text-neutral-800">Who is taking this?</label>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {TEAM.map((n) => (
                   <button
@@ -686,7 +710,7 @@
                       'rounded-xl px-3 py-2.5 text-sm font-semibold transition',
                       name === n
                         ? 'bg-indigo-500 text-white'
-                        : 'bg-slate-800/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200 hover:text-neutral-900'
                     )}
                   >
                     {n}
@@ -698,12 +722,12 @@
                 onClick={() => onStart(name)}
                 className={cx(
                   'mt-6 w-full rounded-xl px-4 py-3 text-sm font-semibold transition',
-                  name ? 'bg-indigo-500 text-white hover:bg-indigo-400' : 'cursor-not-allowed bg-slate-800 text-slate-600'
+                  name ? 'bg-indigo-500 text-white hover:bg-indigo-400' : 'cursor-not-allowed bg-neutral-200 text-neutral-400'
                 )}
               >
                 {name ? 'Start as ' + name : 'Pick your name to begin'}
               </button>
-              <p className="mt-3 text-xs leading-relaxed text-slate-500">
+              <p className="mt-3 text-xs leading-relaxed text-neutral-9000">
                 The suggested time is a guide, not a limit.
               </p>
             </div>
@@ -773,38 +797,38 @@
 
         const tone = pct >= 80 ? 'emerald' : pct >= 60 ? 'amber' : 'rose'
         const card = {
-          emerald: 'border-emerald-400/40 bg-emerald-500/10',
-          amber: 'border-amber-400/40 bg-amber-500/10',
-          rose: 'border-rose-400/40 bg-rose-500/10',
+          emerald: 'border-emerald-400 bg-emerald-50',
+          amber: 'border-amber-400 bg-amber-50',
+          rose: 'border-rose-400 bg-rose-50',
         }[tone]
         const chip = {
-          emerald: 'bg-emerald-500 text-emerald-950',
-          amber: 'bg-amber-500 text-amber-950',
-          rose: 'bg-rose-500 text-rose-950',
+          emerald: 'bg-emerald-600 text-white',
+          amber: 'bg-amber-500 text-white',
+          rose: 'bg-rose-600 text-white',
         }[tone]
 
         return (
           <div className="mx-auto max-w-3xl">
             <div className={cx('rounded-2xl border p-6', card)}>
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-600">
                 Result for {name}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-4">
                 <span className={cx('rounded-xl px-4 py-2 text-3xl font-bold', chip)}>
                   {score} / {total}
                 </span>
-                <span className="text-2xl font-semibold text-slate-200">{pct}%</span>
-                <span className="text-sm text-slate-400">Total time {fmt(totalSecs)}</span>
+                <span className="text-2xl font-semibold text-neutral-800">{pct}%</span>
+                <span className="text-sm text-neutral-600">Total time {fmt(totalSecs)}</span>
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-              <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+            <div className="mt-4 rounded-2xl border border-neutral-300 bg-white p-5">
+              <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-600">
                 Send this to your lead
               </h2>
               <p
                 ref={codeRef}
-                className="mt-3 break-all rounded-xl bg-slate-950/60 p-3 font-mono text-[11px] leading-relaxed text-slate-400"
+                className="mt-3 break-all rounded-xl bg-neutral-200 p-3 font-mono text-[11px] leading-relaxed text-neutral-600"
               >
                 {code}
               </p>
@@ -812,19 +836,19 @@
                 onClick={copy}
                 className={cx(
                   'mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition',
-                  copied ? 'bg-emerald-500 text-emerald-950' : 'bg-indigo-500 text-white hover:bg-indigo-400'
+                  copied ? 'bg-emerald-600 text-white' : 'bg-indigo-500 text-white hover:bg-indigo-400'
                 )}
               >
                 {copied ? 'Copied' : 'Copy my result code'}
               </button>
             </div>
 
-            <h2 className="mt-8 text-lg font-semibold text-slate-100">Every question</h2>
+            <h2 className="mt-8 text-lg font-semibold text-neutral-900">Every question</h2>
             {LESSONS.map((lesson) => (
               <div key={lesson.id} className="mt-5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-indigo-300">{lesson.title}</h3>
-                  <span className="text-xs text-slate-500">
+                  <h3 className="text-sm font-semibold text-indigo-700">{lesson.title}</h3>
+                  <span className="text-xs text-neutral-9000">
                     you spent {fmt(seconds[lesson.id] || 0)} of about {estimateMinutes(lesson)}:00
                   </span>
                 </div>
@@ -837,22 +861,22 @@
                       key={q.id}
                       className={cx(
                         'mt-3 rounded-2xl border p-4',
-                        right ? 'border-emerald-400/30 bg-emerald-500/5' : 'border-rose-400/30 bg-rose-500/5'
+                        right ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'
                       )}
                     >
-                      <span className={cx('text-sm font-bold', right ? 'text-emerald-400' : 'text-rose-400')}>
+                      <span className={cx('text-sm font-bold', right ? 'text-emerald-600' : 'text-rose-600')}>
                         {right ? 'Correct' : 'Missed'}
                       </span>
-                      <p className="mt-2 text-sm font-medium text-slate-200">{q.q}</p>
+                      <p className="mt-2 text-sm font-medium text-neutral-800">{q.q}</p>
                       {!right && (
-                        <p className="mt-2 text-sm text-rose-300">
+                        <p className="mt-2 text-sm text-rose-700">
                           You picked: {given === undefined ? 'nothing' : q.options[given]}
                         </p>
                       )}
-                      <p className="mt-1 text-sm text-emerald-300">Answer: {q.options[q.answer]}</p>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-400">{q.why}</p>
+                      <p className="mt-1 text-sm text-emerald-700">Answer: {q.options[q.answer]}</p>
+                      <p className="mt-2 text-sm leading-relaxed text-neutral-600">{q.why}</p>
                       {tries > 0 && (
-                        <p className="mt-2 text-xs text-amber-400">
+                        <p className="mt-2 text-xs text-amber-700">
                           You checked {tries} wrong answer{tries === 1 ? '' : 's'} before this one.
                         </p>
                       )}
@@ -864,7 +888,7 @@
 
             <button
               onClick={onRestart}
-              className="mt-8 w-full rounded-xl border border-slate-700 px-4 py-3 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+              className="mt-8 w-full rounded-xl border border-neutral-400 px-4 py-3 text-sm font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
             >
               Start again
             </button>
@@ -874,21 +898,21 @@
 
       function Shell({ children }) {
         return (
-          <div className="min-h-screen bg-slate-950 text-slate-200 antialiased">
+          <div className="min-h-screen bg-neutral-100 text-neutral-800 antialiased">
             <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
               <header className="mb-8 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-lg">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-lg">
                     &#128218;
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-slate-50">Rating training</div>
-                    <div className="text-xs tracking-wide text-slate-500">Study and knowledge checks</div>
+                    <div className="text-sm font-semibold text-neutral-900">Rating training</div>
+                    <div className="text-xs tracking-wide text-neutral-9000">Study and knowledge checks</div>
                   </div>
                 </div>
                 <a
                   href="./index.html"
-                  className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                  className="rounded-xl border border-neutral-400 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:border-neutral-500 hover:text-neutral-900"
                 >
                   Calculator
                 </a>
@@ -995,18 +1019,18 @@
                       key={l.id}
                       className={cx(
                         'h-1.5 w-8 rounded-full transition',
-                        i < page ? 'bg-indigo-400' : i === page ? 'bg-indigo-500' : 'bg-slate-800'
+                        i < page ? 'bg-indigo-400' : i === page ? 'bg-indigo-500' : 'bg-neutral-200'
                       )}
                     />
                   ))}
                 </div>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-neutral-9000">
                   Page {page + 1} of {LESSONS.length} &middot; about {estimateMinutes(current)} min
                 </span>
               </div>
 
-              <h1 className="mt-6 text-2xl font-bold text-slate-50 sm:text-3xl">{current.title}</h1>
-              <p className="mt-2 text-sm text-slate-400">{current.summary}</p>
+              <h1 className="mt-6 text-2xl font-bold text-neutral-900 sm:text-3xl">{current.title}</h1>
+              <p className="mt-2 text-sm text-neutral-600">{current.summary}</p>
 
               <article className="mt-6">
                 {current.blocks.map((b, i) => (
@@ -1014,10 +1038,10 @@
                 ))}
               </article>
 
-              <div className="mt-10 border-t border-slate-800 pt-6">
+              <div className="mt-10 border-t border-neutral-300 pt-6">
                 <div className="flex items-baseline justify-between">
-                  <h2 className="text-lg font-semibold text-slate-100">Knowledge checks</h2>
-                  <span className="text-xs text-slate-500">
+                  <h2 className="text-lg font-semibold text-neutral-900">Knowledge checks</h2>
+                  <span className="text-xs text-neutral-9000">
                     {answered} of {current.questions.length} answered
                   </span>
                 </div>
@@ -1034,15 +1058,15 @@
                 ))}
               </div>
 
-              <div className="mt-8 flex items-center justify-between gap-3 border-t border-slate-800 pt-6">
+              <div className="mt-8 flex items-center justify-between gap-3 border-t border-neutral-300 pt-6">
                 <button
                   onClick={() => go(-1)}
                   disabled={page === 0}
                   className={cx(
                     'rounded-xl border px-5 py-2.5 text-sm font-medium transition',
                     page === 0
-                      ? 'cursor-not-allowed border-slate-900 text-slate-700'
-                      : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-100'
+                      ? 'cursor-not-allowed border-neutral-200 text-neutral-400'
+                      : 'border-neutral-400 text-neutral-700 hover:border-neutral-500 hover:text-neutral-900'
                   )}
                 >
                   Previous
@@ -1059,8 +1083,8 @@
                     className={cx(
                       'rounded-xl px-6 py-2.5 text-sm font-semibold transition',
                       allAnswered
-                        ? 'bg-emerald-500 text-emerald-950 hover:bg-emerald-400'
-                        : 'cursor-not-allowed bg-slate-800 text-slate-600'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-400'
+                        : 'cursor-not-allowed bg-neutral-200 text-neutral-400'
                     )}
                   >
                     {allAnswered ? 'Submit and see my score' : 'Answer every question first'}
@@ -1076,7 +1100,7 @@
               </div>
 
               {last && !allAnswered && (
-                <p className="mt-3 text-right text-xs text-amber-400">
+                <p className="mt-3 text-right text-xs text-amber-700">
                   Some questions on earlier pages are still blank. Use Previous to finish them.
                 </p>
               )}
