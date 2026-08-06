@@ -413,3 +413,45 @@ test('no passphrase list is present in any published page', () => {
     )
   }
 })
+
+/* ---------------- login and one attempt ---------------- */
+
+test('keys.json covers the whole team and holds no plain passphrases', () => {
+  const keys = JSON.parse(fs.readFileSync(new URL('./keys.json', import.meta.url), 'utf8'))
+  const { fingerprint } = new Function(
+    extractIdentity('training.html') + '\n return { fingerprint }'
+  )()
+
+  assert.deepEqual(Object.keys(keys).sort(), course.TEAM.slice().sort(), 'team mismatch')
+
+  for (const [name, value] of Object.entries(keys)) {
+    // A fingerprint, not a word: base36, and not equal to any plausible plain word.
+    assert.match(value, /^[0-9a-z]{6,13}$/, `${name} value does not look like a fingerprint`)
+    assert.notEqual(
+      value,
+      fingerprint(name, value),
+      `${name} looks like the passphrase itself rather than its fingerprint`
+    )
+  }
+})
+
+test('config.json is present and parseable', () => {
+  const cfg = JSON.parse(fs.readFileSync(new URL('./config.json', import.meta.url), 'utf8'))
+  assert.ok('endpoint' in cfg, 'config.json needs an endpoint field, even if empty')
+  assert.equal(typeof cfg.endpoint, 'string')
+})
+
+test('the training page no longer reveals answers before submission', () => {
+  const html = fs.readFileSync(new URL('./training.html', import.meta.url), 'utf8')
+  // Check answer used to reveal correctness mid-lesson. The lead sees the
+  // answers instead, so nothing on the page should hand them back.
+  assert.equal(html.includes('Check answer'), false, 'Check answer button still present')
+  assert.equal(html.includes('Not quite, try again'), false, 'inline feedback still present')
+})
+
+test('the result carries what the dashboard needs to show their work', () => {
+  const html = fs.readFileSync(new URL('./training.html', import.meta.url), 'utf8')
+  for (const field of ['a:', 'w:', 'c:', 'ci:', 'k:', 'secs:']) {
+    assert.ok(html.includes('              ' + field), `payload is missing ${field}`)
+  }
+})

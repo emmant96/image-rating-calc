@@ -29,7 +29,7 @@
     <div id="root"></div>
 
     <script type="text/babel" data-presets="react-classic">
-      const { useMemo, useState } = React
+      const { useEffect, useMemo, useState } = React
 
       /* ---8<--- META START
        * Mirrors the lessons in training.html. The result code stores per lesson
@@ -120,6 +120,8 @@
 
       const cx = (...c) => c.filter(Boolean).join(' ')
 
+      const LETTERS = ['A', 'B', 'C', 'D', 'E']
+
       const same = (a, b) =>
         Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i])
 
@@ -175,7 +177,7 @@
         const firstTime = hasRetries ? r.w.filter((n) => n === 0).length : null
         return (
           <tr className="border-t border-slate-800 bg-slate-950/60">
-            <td colSpan={14} className="px-4 py-4">
+            <td colSpan={15} className="px-4 py-4">
               <div className="mb-3 flex flex-wrap gap-5 text-xs text-slate-400">
                 <span>
                   Right first time:{' '}
@@ -197,19 +199,29 @@
                       <th className="py-2 pr-3">#</th>
                       <th className="py-2 pr-3">Lesson</th>
                       <th className="py-2 pr-3">Question</th>
+                      <th className="py-2 pr-3">Picked</th>
+                      <th className="py-2 pr-3">Correct</th>
                       <th className="py-2 pr-3">Result</th>
-                      <th className="py-2 pr-3">Before settling</th>
+                      <th className="py-2 pr-3">Changed</th>
                     </tr>
                   </thead>
                   <tbody>
                     {QUESTION_META.map((q, i) => {
                       const correct = r.c ? r.c[i] === 1 : null
                       const wrong = hasRetries ? r.w[i] || 0 : null
+                      const picked = (r.a || [])[i]
+                      const right = (r.ci || [])[i]
                       return (
                         <tr key={q.id} className="border-t border-slate-800/70">
                           <td className="py-2 pr-3 text-slate-600">{i + 1}</td>
                           <td className="py-2 pr-3 text-slate-500">L{QUESTION_LESSON[i] + 1}</td>
                           <td className="py-2 pr-3 text-slate-300">{q.short}</td>
+                          <td className="py-2 pr-3 font-mono text-slate-200">
+                            {picked === undefined || picked < 0 ? '-' : LETTERS[picked]}
+                          </td>
+                          <td className="py-2 pr-3 font-mono text-emerald-400">
+                            {right === undefined ? '?' : LETTERS[right]}
+                          </td>
                           <td className="py-2 pr-3">
                             {correct === null ? (
                               <span className="text-slate-600">unknown</span>
@@ -226,7 +238,7 @@
                               <span className="text-emerald-400">first try</span>
                             ) : (
                               <span className="text-amber-300">
-                                {wrong} wrong pick{wrong === 1 ? '' : 's'}
+                                {wrong} time{wrong === 1 ? '' : 's'}
                               </span>
                             )}
                           </td>
@@ -249,6 +261,37 @@
 
       function App() {
         const [open, setOpen] = useState(null)
+        const [live, setLive] = useState([])
+        const [liveState, setLiveState] = useState('checking')
+
+        // If a collector is configured, results arrive on their own and nobody
+        // has to paste anything. Without one the page falls back to codes.
+        useEffect(() => {
+          let cancelled = false
+          const load = async () => {
+            try {
+              const cfg = await fetch('./config.json', { cache: 'no-store' }).then((r) =>
+                r.ok ? r.json() : null
+              )
+              if (!cfg || !cfg.endpoint) {
+                if (!cancelled) setLiveState('none')
+                return
+              }
+              const data = await fetch(cfg.endpoint, { cache: 'no-store' }).then((r) => r.json())
+              if (cancelled) return
+              setLive(Array.isArray(data) ? data : data.rows || [])
+              setLiveState('ok')
+            } catch (err) {
+              if (!cancelled) setLiveState('failed')
+            }
+          }
+          load()
+          const timer = setInterval(load, 60000)
+          return () => {
+            cancelled = true
+            clearInterval(timer)
+          }
+        }, [])
         const [showKeys, setShowKeys] = useState(false)
         // The passphrases live in this browser's storage only. They are never
         // written to a file and never published, which is what keeps them
@@ -301,7 +344,8 @@
         }
 
         const { rows, errors } = useMemo(() => {
-          const rows = []
+          // Anything the collector delivered, plus anything pasted by hand.
+          const rows = live.map((r) => ({ ...r, total: (r.secs || []).reduce((a, b) => a + b, 0) }))
           const errors = []
           text.split(/[\r\n]+/).forEach((line) => {
             const r = decodeResult(line)
@@ -316,7 +360,7 @@
           // Highest score first, then fastest among equal scores.
           rows.sort((a, b) => b.s - a.s || a.total - b.total)
           return { rows, errors }
-        }, [text])
+        }, [text, live])
 
         const best = rows.length ? rows[0] : null
         const flags = useMemo(() => {
@@ -375,6 +419,27 @@
                 </div>
               </header>
 
+              <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+                <span
+                  className={cx(
+                    'rounded-lg px-2.5 py-1 font-semibold',
+                    liveState === 'ok'
+                      ? 'bg-emerald-500/15 text-emerald-300'
+                      : liveState === 'failed'
+                        ? 'bg-rose-500/15 text-rose-300'
+                        : 'bg-slate-800 text-slate-400'
+                  )}
+                >
+                  {liveState === 'ok'
+                    ? 'Collector connected, ' + live.length + ' result(s) received'
+                    : liveState === 'failed'
+                      ? 'Collector configured but unreachable'
+                      : liveState === 'none'
+                        ? 'No collector set up, paste codes below'
+                        : 'Checking for a collector...'}
+                </span>
+              </div>
+
               <textarea
                 value={text}
                 onChange={(e) => save(e.target.value)}
@@ -421,7 +486,7 @@
                       Passphrases
                     </h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      Stored in this browser only. Never published, never in the repo.
+                      Type the words you handed out. Stored in this browser only.
                     </p>
                   </div>
                   <button

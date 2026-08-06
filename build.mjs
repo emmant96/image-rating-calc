@@ -121,6 +121,15 @@ if (existsSync(webAssets)) {
   console.log('no assets/web folder, image slots will render as placeholders')
 }
 
+// Runtime config the pages fetch: passphrase fingerprints and the collector URL.
+// keys.json holds one way fingerprints, never the passphrases themselves.
+for (const f of ['keys.json', 'config.json']) {
+  if (existsSync(join(root, f))) {
+    cpSync(join(root, f), join(dist, f))
+    console.log(`copied ${f}`)
+  }
+}
+
 // GitHub Pages runs Jekyll by default, which skips files it does not recognise.
 writeFileSync(join(dist, '.nojekyll'), '')
 rmSync(tmp, { recursive: true, force: true })
