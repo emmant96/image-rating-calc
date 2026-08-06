@@ -360,3 +360,56 @@ test('wrongTries counts picks made before the correct one', () => {
   // Never correct: every pick counts as a wrong one.
   assert.equal(wrongTries(q, { [q.id]: [wrong1, wrong2] }), 2)
 })
+
+/* ---------------- identity fingerprint ---------------- */
+
+function extractIdentity(file) {
+  const html = fs.readFileSync(new URL('./' + file, import.meta.url), 'utf8')
+  const s = html.indexOf('---8<--- IDENTITY START')
+  const e = html.indexOf('---8<--- IDENTITY END')
+  assert.ok(s !== -1 && e !== -1, `identity markers not found in ${file}`)
+  return html.slice(html.indexOf('*/', s) + 2, html.lastIndexOf('/*', e)).trim()
+}
+
+test('the fingerprint function is identical in both pages', () => {
+  // If these drift, every submission verifies as WRONG and it looks like the
+  // whole team cheated. That failure is silent and accusatory, so it fails here.
+  assert.equal(
+    extractIdentity('training.html'),
+    extractIdentity('results.html'),
+    'fingerprint() differs between training.html and results.html'
+  )
+})
+
+test('fingerprints identify a person by their passphrase', () => {
+  const { fingerprint } = new Function(
+    extractIdentity('training.html') + '\n return { fingerprint }'
+  )()
+
+  // The same person with the same word always produces the same value.
+  assert.equal(fingerprint('Daniel', 'otter'), fingerprint('Daniel', 'otter'))
+
+  // A different passphrase does not verify as Daniel.
+  assert.notEqual(fingerprint('Daniel', 'otter'), fingerprint('Daniel', 'badger'))
+
+  // Nor does someone else using Daniel's word, since the name is mixed in.
+  assert.notEqual(fingerprint('Daniel', 'otter'), fingerprint('Enny', 'otter'))
+
+  // Case and stray spaces must not lock someone out of their own result.
+  assert.equal(fingerprint('Daniel', 'otter'), fingerprint('daniel', '  OTTER '))
+
+  // The output must be short enough to sit in a pasted code.
+  assert.ok(fingerprint('Daniel', 'otter').length <= 12)
+})
+
+test('no passphrase list is present in any published page', () => {
+  // The whole scheme rests on the pages containing no secrets to read.
+  for (const f of ['training.html', 'results.html', 'index.html']) {
+    const html = fs.readFileSync(new URL('./' + f, import.meta.url), 'utf8')
+    assert.doesNotMatch(
+      html,
+      /hedgehog\.keys\s*=\s*\{[^}]*\w+\s*:\s*['"][^'"]+['"]/,
+      `${f} appears to contain passphrase values`
+    )
+  }
+})

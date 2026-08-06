@@ -501,26 +501,34 @@
 
       /* ---8<--- COURSE END */
 
-      /**
-       * A random id kept in this browser's storage. It identifies the browser,
-       * not the person, so it cannot prove who sat at the keyboard. What it does
-       * show is when several submissions came from the same place, which is the
-       * signal worth looking at. Two teammates sharing one laptop will collide
-       * legitimately, so it is a prompt to ask, never proof of anything.
+      /* ---8<--- IDENTITY START
+       * One way fingerprint of a person's passphrase.
+       *
+       * The page holds no list of valid passphrases, so nothing secret ships in
+       * the source. It mixes what the person types with their name and sends
+       * only the fingerprint. The lead holds the real passphrases and checks
+       * them in the dashboard, where they live in that browser's storage rather
+       * than in any file.
+       *
+       * To submit as Daniel you would need Daniel's passphrase, and the
+       * published source gives you nothing to guess against. What this cannot
+       * stop is Daniel telling someone else what his passphrase is.
        */
-      function deviceId() {
-        try {
-          let id = localStorage.getItem('hedgehog.device')
-          if (!id) {
-            id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
-            localStorage.setItem('hedgehog.device', id)
-          }
-          return id
-        } catch (err) {
-          // Private browsing refuses storage, so the submission simply carries no id.
-          return ''
+      function fingerprint(name, passphrase) {
+        const input =
+          String(name).trim().toLowerCase() + '|' + String(passphrase).trim().toLowerCase()
+        let h1 = 0xdeadbeef
+        let h2 = 0x41c6ce57
+        for (let i = 0; i < input.length; i++) {
+          const ch = input.charCodeAt(i)
+          h1 = Math.imul(h1 ^ ch, 2654435761)
+          h2 = Math.imul(h2 ^ ch, 1597334677)
         }
+        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+        return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
       }
+      /* ---8<--- IDENTITY END */
 
       function encodeResult(payload) {
         const json = JSON.stringify(payload)
@@ -700,6 +708,7 @@
 
       function Start({ onStart }) {
         const [name, setName] = useState('')
+        const [pass, setPass] = useState('')
         const mins = LESSONS.reduce((n, l) => n + estimateMinutes(l), 0)
         return (
           <div className="mx-auto max-w-2xl">
@@ -738,15 +747,37 @@
                   </button>
                 ))}
               </div>
+              <label className="mt-6 block text-sm font-semibold text-neutral-800">
+                Your passphrase
+              </label>
+              <input
+                type="password"
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                placeholder="the word your lead gave you"
+                autoComplete="off"
+                className="mt-2 w-full rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm text-neutral-800 outline-none transition focus:border-indigo-500"
+              />
+              <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+                This is not checked here and is never sent anywhere. It only proves the
+                result is yours when your lead opens it.
+              </p>
+
               <button
-                disabled={!name}
-                onClick={() => onStart(name)}
+                disabled={!name || !pass.trim()}
+                onClick={() => onStart(name, pass)}
                 className={cx(
-                  'mt-6 w-full rounded-xl px-4 py-3 text-sm font-semibold transition',
-                  name ? 'bg-indigo-500 text-white hover:bg-indigo-400' : 'cursor-not-allowed bg-neutral-200 text-neutral-400'
+                  'mt-5 w-full rounded-xl px-4 py-3 text-sm font-semibold transition',
+                  name && pass.trim()
+                    ? 'bg-indigo-500 text-white hover:bg-indigo-400'
+                    : 'cursor-not-allowed bg-neutral-200 text-neutral-400'
                 )}
               >
-                {name ? 'Start as ' + name : 'Pick your name to begin'}
+                {!name
+                  ? 'Pick your name to begin'
+                  : !pass.trim()
+                    ? 'Enter your passphrase'
+                    : 'Start as ' + name}
               </button>
               <p className="mt-3 text-xs leading-relaxed text-neutral-9000">
                 The suggested time is a guide, not a limit.
@@ -756,7 +787,7 @@
         )
       }
 
-      function Results({ name, answers, checks, seconds, onRestart }) {
+      function Results({ name, pass, answers, checks, seconds, onRestart }) {
         const score = scoreAnswers(answers)
         const total = ALL_QUESTIONS.length
         const pct = Math.round((score / total) * 100)
@@ -776,9 +807,9 @@
               a: ALL_QUESTIONS.map((q) => (answers[q.id] === undefined ? -1 : answers[q.id])),
               w: ALL_QUESTIONS.map((q) => wrongTries(q, checks)),
               c: ALL_QUESTIONS.map((q) => (answers[q.id] === q.answer ? 1 : 0)),
-              dev: deviceId(),
+              k: fingerprint(name, pass),
             }),
-          [name, score, total, seconds, answers, checks]
+          [name, pass, score, total, seconds, answers, checks]
         )
 
         const copy = async () => {
@@ -947,6 +978,7 @@
 
       function App() {
         const [name, setName] = useState(null)
+        const [pass, setPass] = useState('')
         const [page, setPage] = useState(0)
         const [answers, setAnswers] = useState({})
         // Every answer submitted via Check answer, in order, per question.
@@ -1003,8 +1035,9 @@
           return (
             <Shell>
               <Start
-                onStart={(n) => {
+                onStart={(n, p) => {
                   setName(n)
+                  setPass(p)
                   enter.current = Date.now()
                 }}
               />
@@ -1016,11 +1049,13 @@
             <Shell>
               <Results
                 name={name}
+                pass={pass}
                 answers={answers}
                 checks={checks}
                 seconds={seconds}
                 onRestart={() => {
                   setName(null)
+                  setPass('')
                   setPage(0)
                   setAnswers({})
                   setChecks({})
