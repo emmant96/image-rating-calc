@@ -302,3 +302,60 @@ test('the correct answer is not always in the same position', () => {
     `${atZero} of ${positions.length} answers sit at position 0`
   )
 })
+
+test('results page question metadata matches the course, in order', () => {
+  const html = fs.readFileSync(new URL('./results.html', import.meta.url), 'utf8')
+  const s = html.indexOf('---8<--- META START')
+  const e = html.indexOf('---8<--- META END')
+  const source = html.slice(html.indexOf('*/', s) + 2, html.lastIndexOf('/*', e))
+  const { QUESTION_META, QUESTION_LESSON } = new Function(
+    source + '\n return { QUESTION_META, QUESTION_LESSON }'
+  )()
+
+  // The result code stores answers, retries and correctness positionally, so a
+  // mismatch here would label one person's work with another question's text.
+  assert.equal(QUESTION_META.length, course.ALL_QUESTIONS.length, 'question count differs')
+  QUESTION_META.forEach((m, i) => {
+    assert.equal(m.id, course.ALL_QUESTIONS[i].id, `question ${i} id differs between pages`)
+    assert.equal(m.short, course.ALL_QUESTIONS[i].short, `question ${m.id} label differs`)
+  })
+
+  // Each question must map back to the lesson it actually belongs to.
+  let k = 0
+  course.LESSONS.forEach((lesson, li) => {
+    lesson.questions.forEach(() => {
+      assert.equal(QUESTION_LESSON[k], li, `question ${k} maps to the wrong lesson`)
+      k++
+    })
+  })
+})
+
+test('every question carries a short label for the dashboard', () => {
+  for (const q of course.ALL_QUESTIONS) {
+    assert.ok(q.short && q.short.length > 5 && q.short.length < 45, `${q.id} needs a short label`)
+  }
+})
+
+test('wrongTries counts picks made before the correct one', () => {
+  const html = fs.readFileSync(new URL('./training.html', import.meta.url), 'utf8')
+  const s = html.indexOf('---8<--- COURSE START')
+  const e = html.indexOf('---8<--- COURSE END')
+  const source = html.slice(html.indexOf('*/', s) + 2, html.lastIndexOf('/*', e))
+  const { wrongTries, ALL_QUESTIONS } = new Function(
+    source + '\n return { wrongTries, ALL_QUESTIONS }'
+  )()
+
+  const q = ALL_QUESTIONS[0]
+  const right = q.answer
+  const wrong1 = (right + 1) % q.options.length
+  const wrong2 = (right + 2) % q.options.length
+
+  assert.equal(wrongTries(q, {}), 0, 'never touched means no wrong tries')
+  assert.equal(wrongTries(q, { [q.id]: [right] }), 0, 'straight to the answer is zero')
+  assert.equal(wrongTries(q, { [q.id]: [wrong1, right] }), 1)
+  assert.equal(wrongTries(q, { [q.id]: [wrong1, wrong2, right] }), 2)
+  // Wandering away after being right does not add to the count.
+  assert.equal(wrongTries(q, { [q.id]: [wrong1, right, wrong2] }), 1)
+  // Never correct: every pick counts as a wrong one.
+  assert.equal(wrongTries(q, { [q.id]: [wrong1, wrong2] }), 2)
+})

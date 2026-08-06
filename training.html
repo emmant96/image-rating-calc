@@ -68,6 +68,7 @@
           questions: [
             {
               id: 'see1',
+              short: 'Non-photoreal style asked for',
               q: 'A prompt asks for a hand drawn storybook illustration. The result is clearly not photorealistic. How should that affect your scoring?',
               options: [
                 'It should not count against the image, because the prompt asked for that style',
@@ -80,6 +81,7 @@
             },
             {
               id: 'see2',
+              short: 'Blurred background, sharp subject',
               q: 'The background of an image is soft while the subject is razor sharp, and the softness increases smoothly with distance. What is this?',
               options: [
                 'A normal photographic choice, not a fault',
@@ -116,6 +118,7 @@
           questions: [
             {
               id: 'q1',
+              short: 'Six fingers, otherwise clean',
               q: 'An image is sharp, well lit, and nicely arranged, but the subject has six fingers on one hand. Which axis should take the hit?',
               options: [
                 'AI artifacts only. Visual quality is about the whole image',
@@ -128,6 +131,7 @@
             },
             {
               id: 'q2',
+              short: 'Oversaturated, even lighting',
               q: 'Two responses are near identical, but one has colours pushed far past what a camera could capture, with unnaturally even lighting. Where does this count most?',
               options: [
                 'Visual quality, and check artifacts for a filtered look',
@@ -140,6 +144,7 @@
             },
             {
               id: 'q3',
+              short: 'Shadows disagree with light',
               q: 'In a scene the light clearly comes from a window on the left, yet the shadows also stretch to the left. What have you found?',
               options: [
                 'A lighting logic failure that lowers visual quality',
@@ -175,6 +180,7 @@
           questions: [
             {
               id: 'a1',
+              short: 'Ambiguous finger damage',
               q: 'Two responses look the same at a glance. Zoomed in, one has slightly irregular fingers and the other is clean. Nothing else differs. What do you do?',
               options: [
                 'Prefer the clean one. Ambiguous damage is still a real difference',
@@ -187,6 +193,7 @@
             },
             {
               id: 'a2',
+              short: 'Garbled shop sign',
               q: 'A shop sign in the background reads as letter shaped shapes that do not spell anything. Which axis does this belong to?',
               options: [
                 'AI artifacts. Garbled text is a classic local failure',
@@ -199,6 +206,7 @@
             },
             {
               id: 'a3',
+              short: 'Same flaw four times vs once',
               q: 'One image repeats the same small smudge artifact four times. The other has it once. How should you treat this?',
               options: [
                 'As a wide gap. Repetition makes a small flaw into a large one',
@@ -235,6 +243,7 @@
           questions: [
             {
               id: 's1',
+              short: 'Umbrella added, hand deformed',
               q: 'The prompt asked to add a red umbrella to a person\'s hand. A adds it cleanly and looks natural. B adds it too, but the hand is clearly deformed. Nothing else separates them. Your overall call?',
               options: [
                 'Strongly prefer A',
@@ -247,6 +256,7 @@
             },
             {
               id: 's2',
+              short: 'Three artifacts vs two',
               q: 'Both follow the prompt and look good. On a close look, A has three minor soft edge artifacts and B has two of the same kind. Nothing else differs. Your overall call?',
               options: [
                 'Slightly prefer B',
@@ -259,6 +269,7 @@
             },
             {
               id: 's3',
+              short: 'Torn between slightly and strongly',
               q: 'You are torn between slightly and strongly, mostly because you are not fully confident in your own eye. What should decide it?',
               options: [
                 'The size of the gap between the images, not your confidence',
@@ -271,6 +282,7 @@
             },
             {
               id: 's4',
+              short: 'Required element missing',
               q: 'One response leaves out an object the prompt explicitly required. Everything else about the two is comparable. What is this?',
               options: [
                 'A strong call against the response that left it out',
@@ -306,6 +318,7 @@
           questions: [
             {
               id: 'o1',
+              short: 'Two axes each, IF favours A',
               q: 'Across five axes, A wins two, B wins two, and one is a tie. Instruction following favours A. What is the overall call?',
               options: [
                 'Slightly prefer A, decided by instruction following',
@@ -318,6 +331,7 @@
             },
             {
               id: 'o2',
+              short: 'Artifact vs instruction failure',
               q: 'A has a bad artifact. B fails to follow an explicit instruction. How should you handle the two problems?',
               options: [
                 'Score each axis separately. One does not offset the other',
@@ -330,6 +344,7 @@
             },
             {
               id: 'o3',
+              short: 'Which feedback is useful',
               q: 'Which piece of written feedback is actually useful?',
               options: [
                 'B keeps the shop sign readable while A turns it into letter shaped noise',
@@ -386,6 +401,18 @@
         )
         // 200 words per minute of prose, and a slower 90 for questions you must weigh.
         return Math.max(1, Math.round(words / 200 + qWords / 90))
+      }
+
+      /**
+       * How many wrong options a person selected before landing on the correct
+       * one. Nothing on screen reveals correctness while they answer, so this
+       * measures genuine reconsideration rather than guess-and-check.
+       * A question they never got right counts every attempt as wrong.
+       */
+      function wrongTries(q, attempts) {
+        const seq = (attempts && attempts[q.id]) || []
+        const firstRight = seq.indexOf(q.answer)
+        return firstRight === -1 ? seq.length : firstRight
       }
 
       function scoreAnswers(answers) {
@@ -551,7 +578,7 @@
         )
       }
 
-      function Results({ name, answers, seconds, onRestart }) {
+      function Results({ name, answers, attempts, seconds, onRestart }) {
         const score = scoreAnswers(answers)
         const total = ALL_QUESTIONS.length
         const pct = Math.round((score / total) * 100)
@@ -570,8 +597,12 @@
               d: new Date().toISOString().slice(0, 16),
               secs: LESSONS.map((l) => Math.round(seconds[l.id] || 0)),
               a: ALL_QUESTIONS.map((q) => (answers[q.id] === undefined ? -1 : answers[q.id])),
+              w: ALL_QUESTIONS.map((q) => wrongTries(q, attempts)),
+              // Correctness travels in the code so the dashboard never needs a
+              // second copy of the answer key to keep in sync.
+              c: ALL_QUESTIONS.map((q) => (answers[q.id] === q.answer ? 1 : 0)),
             }),
-          [name, score, total, seconds, answers]
+          [name, score, total, seconds, answers, attempts]
         )
 
         const copy = async () => {
@@ -699,6 +730,12 @@
                       )}
                       <p className="mt-1 text-sm text-emerald-300">Answer: {q.options[q.answer]}</p>
                       <p className="mt-2 text-sm leading-relaxed text-slate-400">{q.why}</p>
+                      {wrongTries(q, attempts) > 0 && (
+                        <p className="mt-2 text-xs text-amber-400">
+                          You changed your mind {wrongTries(q, attempts)} time
+                          {wrongTries(q, attempts) === 1 ? '' : 's'} before settling here.
+                        </p>
+                      )}
                     </div>
                   )
                 })}
@@ -719,6 +756,9 @@
         const [name, setName] = useState(null)
         const [page, setPage] = useState(0)
         const [answers, setAnswers] = useState({})
+        // Every option a person clicks, in order, per question. The final entry
+        // is their answer; anything before it is a change of mind.
+        const [attempts, setAttempts] = useState({})
         const [seconds, setSeconds] = useState({})
         const [done, setDone] = useState(false)
 
@@ -780,11 +820,13 @@
               <Results
                 name={name}
                 answers={answers}
+                attempts={attempts}
                 seconds={seconds}
                 onRestart={() => {
                   setName(null)
                   setPage(0)
                   setAnswers({})
+                  setAttempts({})
                   setSeconds({})
                   setDone(false)
                 }}
@@ -835,7 +877,15 @@
                     q={q}
                     index={i}
                     value={answers[q.id]}
-                    onChange={(id, v) => setAnswers((prev) => ({ ...prev, [id]: v }))}
+                    onChange={(id, v) => {
+                      setAnswers((prev) => ({ ...prev, [id]: v }))
+                      setAttempts((prev) => {
+                        const seq = prev[id] || []
+                        // Clicking the same option again is not a new attempt.
+                        if (seq[seq.length - 1] === v) return prev
+                        return { ...prev, [id]: seq.concat(v) }
+                      })
+                    }}
                   />
                 ))}
               </div>
