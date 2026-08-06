@@ -455,3 +455,13 @@ test('the result carries what the dashboard needs to show their work', () => {
     assert.ok(html.includes('              ' + field), `payload is missing ${field}`)
   }
 })
+
+test('the trainee result screen never reveals the answer key', () => {
+  // One attempt each means the first person to finish could otherwise
+  // screenshot every correct answer and hand it to everyone else.
+  const html = fs.readFileSync(new URL('./training.html', import.meta.url), 'utf8')
+  const app = html.slice(html.indexOf('function Results('), html.indexOf('function Shell('))
+  assert.equal(app.includes('q.options[q.answer]'), false, 'shows the correct option')
+  assert.equal(app.includes('{q.why}'), false, 'shows the explanation')
+  assert.equal(app.includes('Answer:'), false, 'labels the correct answer')
+})

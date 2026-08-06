@@ -984,48 +984,42 @@
               )}
             </div>
 
-            <h2 className="mt-8 text-lg font-semibold text-neutral-900">Every question</h2>
-            {LESSONS.map((lesson) => (
-              <div key={lesson.id} className="mt-5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-indigo-700">{lesson.title}</h3>
-                  <span className="text-xs text-neutral-9000">
-                    you spent {fmt(seconds[lesson.id] || 0)} of about {estimateMinutes(lesson)}:00
-                  </span>
-                </div>
-                {lesson.questions.map((q) => {
-                  const given = answers[q.id]
-                  const right = given === q.answer
-                  const tries = wrongTries(q, checks)
-                  return (
-                    <div
-                      key={q.id}
-                      className={cx(
-                        'mt-3 rounded-2xl border p-4',
-                        right ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'
-                      )}
-                    >
-                      <span className={cx('text-sm font-bold', right ? 'text-emerald-600' : 'text-rose-600')}>
-                        {right ? 'Correct' : 'Missed'}
+            <h2 className="mt-8 text-lg font-semibold text-neutral-900">Where you spent your time</h2>
+            <div className="mt-3 overflow-hidden rounded-2xl border border-neutral-300">
+              {LESSONS.map((lesson, i) => {
+                const missed = lesson.questions.filter((q) => answers[q.id] !== q.answer).length
+                return (
+                  <div
+                    key={lesson.id}
+                    className={cx(
+                      'flex flex-wrap items-center justify-between gap-3 px-4 py-3',
+                      i % 2 ? 'bg-neutral-50' : 'bg-white'
+                    )}
+                  >
+                    <span className="text-sm font-medium text-neutral-800">{lesson.title}</span>
+                    <span className="flex items-center gap-4 text-xs">
+                      <span className="text-neutral-500">
+                        {fmt(seconds[lesson.id] || 0)} of about {estimateMinutes(lesson)}:00
                       </span>
-                      <p className="mt-2 text-sm font-medium text-neutral-800">{q.q}</p>
-                      {!right && (
-                        <p className="mt-2 text-sm text-rose-700">
-                          You picked: {given === undefined ? 'nothing' : q.options[given]}
-                        </p>
-                      )}
-                      <p className="mt-1 text-sm text-emerald-700">Answer: {q.options[q.answer]}</p>
-                      <p className="mt-2 text-sm leading-relaxed text-neutral-600">{q.why}</p>
-                      {tries > 0 && (
-                        <p className="mt-2 text-xs text-amber-700">
-                          You checked {tries} wrong answer{tries === 1 ? '' : 's'} before this one.
-                        </p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
+                      <span
+                        className={cx(
+                          'font-semibold',
+                          missed === 0 ? 'text-emerald-700' : 'text-amber-700'
+                        )}
+                      >
+                        {missed === 0
+                          ? 'all correct'
+                          : missed + ' to revisit'}
+                      </span>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+              Lessons marked to revisit are worth reading again. The answers are not
+              shown here, so go back to the material rather than memorising a list.
+            </p>
 
             <button
               onClick={onRestart}
