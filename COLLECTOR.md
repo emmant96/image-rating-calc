@@ -49,9 +49,14 @@ function doGet() {
 **Execute as: Me** and **Who has access: Anyone**, then Deploy. Approve the
 permission prompt. Copy the web app URL it gives you, which ends in `/exec`.
 
-## 4. Paste the URL in
+## 4. Send me the URL, or paste it in yourself
 
-Edit `config.json` in the repository and put the URL between the quotes:
+Send me the web app URL and I will wire it up. It is the only thing I need:
+the sheet link on its own is not enough, because I cannot open your private
+sheet, and the URL is what the pages talk to.
+
+To do it yourself, edit `config.json` in the repository and put the URL
+between the quotes:
 
 ```json
 { "endpoint": "https://script.google.com/macros/s/AKfy..../exec" }

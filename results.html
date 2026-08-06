@@ -169,6 +169,94 @@
         return flags
       }
 
+      /**
+       * Turns the words typed above into the file the training page reads.
+       *
+       * Only fingerprints leave this panel. The words themselves never go into
+       * the repository, are never published, and do not need to be sent to
+       * anyone: this block is enough to make them work.
+       */
+      function KeyBlock({ keys }) {
+        const [copied, setCopied] = useState(false)
+        const filled = TEAM.filter((n) => (keys[n] || '').trim())
+
+        const json = useMemo(() => {
+          const out = {}
+          filled.forEach((n) => {
+            out[n] = fingerprint(n, keys[n])
+          })
+          return JSON.stringify(out, null, 2)
+        }, [keys])
+
+        if (!filled.length) {
+          return (
+            <p className="mt-4 text-xs leading-relaxed text-slate-500">
+              Type a word next to each name. A block will appear here that you paste
+              into keys.json to make those words live.
+            </p>
+          )
+        }
+
+        const copy = async () => {
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(json)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2500)
+              return
+            }
+          } catch (err) {
+            /* fall through to manual selection */
+          }
+          const ta = document.createElement('textarea')
+          ta.value = json
+          ta.style.position = 'fixed'
+          ta.style.opacity = '0'
+          document.body.appendChild(ta)
+          ta.select()
+          try {
+            document.execCommand('copy')
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2500)
+          } catch (err) {
+            /* leave it on screen to select by hand */
+          }
+          document.body.removeChild(ta)
+        }
+
+        return (
+          <div className="mt-5 border-t border-slate-800 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                  Paste this into keys.json
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {filled.length} of {TEAM.length} set. These are fingerprints, not the
+                  words, so this is safe to publish or send on.
+                </p>
+              </div>
+              <button
+                onClick={copy}
+                className={cx(
+                  'rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                  copied ? 'bg-emerald-500 text-emerald-950' : 'bg-indigo-500 text-white hover:bg-indigo-400'
+                )}
+              >
+                {copied ? 'Copied' : 'Copy block'}
+              </button>
+            </div>
+            <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-950/60 p-3 font-mono text-[11px] leading-relaxed text-slate-300">
+{json}
+            </pre>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+              Open keys.json in the repository, replace everything with this, and commit.
+              The new words work about a minute later.
+            </p>
+          </div>
+        )
+      }
+
       function PersonDetail({ r }) {
         // A code from before retry tracking existed carries no w or c arrays.
         // Absent data must read as unknown, never as a clean first try.
@@ -497,6 +585,7 @@
                   </button>
                 </div>
                 {showKeys && (
+                  <>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {TEAM.map((n) => (
                       <label key={n} className="block">
@@ -512,6 +601,9 @@
                       </label>
                     ))}
                   </div>
+
+                  <KeyBlock keys={keys} />
+                  </>
                 )}
               </div>
 
@@ -536,7 +628,10 @@
               )}
 
               {perPerson.length > 0 && (
-                <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-800">
+                <h2 className="mt-8 text-lg font-semibold text-slate-100">Leaderboard</h2>
+              )}
+              {perPerson.length > 0 && (
+                <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-800">
                   <table className="w-full min-w-[720px] text-left text-sm">
                     <thead className="bg-slate-900/80 text-xs uppercase tracking-wider text-slate-500">
                       <tr>
