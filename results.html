@@ -351,6 +351,16 @@
         const [open, setOpen] = useState(null)
         const [live, setLive] = useState([])
         const [liveState, setLiveState] = useState('checking')
+        // The fingerprints the training page checks against. Public, and the
+        // only thing needed to verify a submission.
+        const [published, setPublished] = useState(null)
+
+        useEffect(() => {
+          fetch('./keys.json', { cache: 'no-store' })
+            .then((r) => (r.ok ? r.json() : null))
+            .then(setPublished)
+            .catch(() => setPublished(null))
+        }, [])
 
         // If a collector is configured, results arrive on their own and nobody
         // has to paste anything. Without one the page falls back to codes.
@@ -403,16 +413,18 @@
         }
 
         /**
-         * 'ok'    the fingerprint matches the passphrase you hold
-         * 'bad'   it does not, so this was submitted without their passphrase
-         * 'unset' you have not entered a passphrase for this person yet
-         * 'none'  the code predates passphrases
+         * 'ok'    the submission carries the passphrase published for that person
+         * 'bad'   it does not, so it was made without their passphrase
+         * 'unset' nobody has published a passphrase for that person yet
+         * 'none'  the submission predates passphrases
+         *
+         * Both sides of this comparison are fingerprints, so no passphrase is
+         * needed here and the check works on any device.
          */
         const verdict = (r) => {
           if (!r.k) return 'none'
-          const secret = keys[r.n]
-          if (!secret || !secret.trim()) return 'unset'
-          return fingerprint(r.n, secret) === r.k ? 'ok' : 'bad'
+          if (!published || !published[r.n]) return 'unset'
+          return published[r.n] === r.k ? 'ok' : 'bad'
         }
         const [text, setText] = useState(() => {
           try {
@@ -466,7 +478,7 @@
             }
           })
           return found
-        }, [rows, keys])
+        }, [rows, published])
         const flaggedNames = useMemo(() => {
           const set = new Set()
           flags.forEach((f) => f.names.forEach((n) => set.add(n)))
@@ -571,10 +583,11 @@
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                      Passphrases
+                      Set passphrases
                     </h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      Type the words you handed out. Stored in this browser only.
+                      Only needed to change someone's word. Verification below happens
+                      on its own.
                     </p>
                   </div>
                   <button
