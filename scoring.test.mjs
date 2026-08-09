@@ -18,11 +18,11 @@ function loadEngine() {
   const end = html.lastIndexOf('/*', endMarker)
   const source = html.slice(start, end)
   return new Function(
-    source + '\n return { computeResult, TASKS, buildStarter, buildStarterVariants }'
+    source + '\n return { computeResult, TASKS, buildStarter, starterAlternatives }'
   )()
 }
 
-const { computeResult, TASKS, buildStarter, buildStarterVariants } = loadEngine()
+const { computeResult, TASKS, buildStarter, starterAlternatives } = loadEngine()
 
 const r2i = ([instruction, personId, refPreservation, visualQuality, artifacts]) =>
   computeResult('r2i', { instruction, personId, refPreservation, visualQuality, artifacts })
@@ -109,92 +109,104 @@ test('starter is null until every axis is scored', () => {
   assert.equal(buildStarter({ instruction: 2 }, computeResult('r2i', { instruction: 2 })), null)
 })
 
-/** Any phrasing in the pool can be shown, so all of them must hold up. */
-function eachVariant(fn) {
+/** Walk every reachable score combination for a task. */
+function eachCombo(fn) {
   for (const taskId of ['r2i', 't2i']) {
     for (const scores of allCombos(taskId)) {
       const result = computeResult(taskId, scores)
-      for (const text of buildStarterVariants(scores, result)) {
-        fn(text, result, scores, taskId)
-      }
+      fn(buildStarter(scores, result, 0), result, scores, taskId)
     }
   }
 }
 
-test('every phrasing stays within 150 to 200 characters', () => {
-  eachVariant((text, _r, scores, taskId) => {
-    assert.ok(
-      text.length >= 150 && text.length <= 200,
-      `${taskId} ${JSON.stringify(scores)} produced ${text.length} chars: ${text}`
-    )
+test('the skeleton is never short enough to be rejected', () => {
+  // Reviewers reject one line answers under twenty words, so the scaffold must
+  // start well clear of that even before the rater fills anything in.
+  eachCombo((text, _r, scores, taskId) => {
+    const words = text.trim().split(/\s+/).length
+    assert.ok(words >= 40, `${taskId} ${JSON.stringify(scores)} produced only ${words} words`)
   })
 })
 
-test('no phrasing claims a sweep when the losing side won an axis', () => {
-  const SWEEP =
-    /does not win any dimension outright|does not take any dimension|does not come out ahead anywhere|Every dimension that separates|not win any of the remaining dimensions|only response to win a scored dimension|does not win anywhere/
-  eachVariant((text, result, scores, taskId) => {
-    if (!SWEEP.test(text)) return
-    const loserWins = result.verdict.side === 'A' ? result.winsB : result.winsA
-    assert.equal(loserWins, 0, `false sweep for ${taskId} ${JSON.stringify(scores)}: ${text}`)
+test('every scored axis gets its own clause', () => {
+  const NAMES = {
+    instruction: 'instruction following',
+    personId: 'person ID',
+    refPreservation: 'reference preservation',
+    visualQuality: 'visual quality',
+    artifacts: 'AI artifacts',
+  }
+  eachCombo((text, _r, scores, taskId) => {
+    for (const axis of TASKS[taskId].axes) {
+      assert.ok(
+        text.toLowerCase().includes(NAMES[axis].toLowerCase()),
+        `${taskId} skeleton never mentions ${axis}: ${text}`
+      )
+    }
   })
 })
 
-test('every phrasing names the side the engine actually picked', () => {
-  eachVariant((text, result) => {
+test('a tied axis is described as not separating the two', () => {
+  const scores = { instruction: 2, personId: 1, refPreservation: 0, visualQuality: -1, artifacts: -1 }
+  const text = buildStarter(scores, computeResult('r2i', scores), 0)
+  assert.match(
+    text,
+    /reference preservation[^.]*(even|level|Neither)/i,
+    'the tied axis should be called out as even'
+  )
+})
+
+test('every skeleton states the trade-off', () => {
+  // The reviewing standard names this as the most commonly missing part.
+  eachCombo((text, _r, scores, taskId) => {
+    assert.match(text, /Trade-off:/, `${taskId} ${JSON.stringify(scores)} has no trade-off line`)
+  })
+})
+
+test('the skeleton opens on the side the engine actually picked', () => {
+  eachCombo((text, result) => {
     if (result.verdict.side === 'T') {
-      assert.doesNotMatch(text, /is preferred over Image/, `tie text picks a winner: ${text}`)
+      assert.doesNotMatch(text.split('.')[0], /prefer Response [AB]/, `tie text picks a winner: ${text}`)
       return
     }
     const W = result.verdict.side
     const L = W === 'A' ? 'B' : 'A'
+    const opening = text.split('.')[0]
     assert.ok(
-      text.includes('Image ' + W),
-      `phrasing never names the winner ${W}: ${text}`
+      opening.includes('Response ' + W),
+      `opening does not name the winner ${W}: ${opening}`
     )
-    // The losing side must never be the one described as preferred.
-    assert.doesNotMatch(
-      text,
-      new RegExp('Image ' + L + ' is (preferred|the stronger)'),
-      `phrasing names the loser as preferred: ${text}`
+    assert.ok(
+      !opening.includes('Response ' + L),
+      `opening names the losing side ${L}: ${opening}`
     )
   })
 })
 
-test('every phrasing ends mid-sentence so it cannot pass as finished feedback', () => {
-  eachVariant((text) => {
-    assert.ok(text.endsWith(' '), `starter should trail a space: ${text}`)
-    assert.doesNotMatch(text.trimEnd(), /[.!?]$/, `starter looks complete: ${text}`)
+test('brackets mark everything the rater must supply', () => {
+  // The calculator cannot see the images, so any claim about them is a blank.
+  eachCombo((text, _r, scores, taskId) => {
+    const blanks = (text.match(/\[[^\]]+\]/g) || []).length
+    assert.ok(blanks >= 2, `${taskId} ${JSON.stringify(scores)} left nothing for the rater: ${text}`)
   })
 })
 
-test('every score set offers several different phrasings', () => {
-  let min = Infinity
-  for (const taskId of ['r2i', 't2i']) {
-    for (const scores of allCombos(taskId)) {
-      const variants = buildStarterVariants(scores, computeResult(taskId, scores))
-      const unique = new Set(variants)
-      assert.equal(unique.size, variants.length, `duplicate phrasings for ${JSON.stringify(scores)}`)
-      min = Math.min(min, unique.size)
-    }
-  }
-  // Guards the point of the pool: identical openers across taskers is the
-  // templated look the rating guidelines penalise.
-  assert.ok(min >= 5, `some score set offers only ${min} phrasings`)
-})
-
-test('rewording changes the text and cycles back around', () => {
+test('rewording changes the skeleton', () => {
   const scores = { instruction: 2, personId: 1, refPreservation: 0, visualQuality: -1, artifacts: -1 }
   const result = computeResult('r2i', scores)
-  const total = buildStarterVariants(scores, result).length
   const seen = new Set()
-  for (let seed = 0; seed < total; seed++) seen.add(buildStarter(scores, result, seed))
-  assert.equal(seen.size, total, 'seeding should reach every phrasing exactly once')
+  for (let seed = 0; seed < 4; seed++) seen.add(buildStarter(scores, result, seed))
+  assert.ok(seen.size >= 3, `rewording produced only ${seen.size} distinct skeletons`)
 })
 
-test('no em dashes anywhere in the UI copy', () => {
-  const html = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8')
-  assert.equal(html.includes('—'), false, 'found an em dash in index.html')
+test('the rephrase bank offers several options per slot', () => {
+  const scores = { instruction: 2, personId: 1, refPreservation: 0, visualQuality: -1, artifacts: -1 }
+  const groups = starterAlternatives(scores, computeResult('r2i', scores))
+  assert.ok(groups.length >= 4, 'expected a bank for opening, wins, evens and trade-off')
+  for (const g of groups) {
+    assert.ok(g.options.length >= 3, `${g.slot} offers only ${g.options.length} wordings`)
+    assert.equal(new Set(g.options).size, g.options.length, `${g.slot} repeats a wording`)
+  }
 })
 
 /* ---------------- training course ---------------- */

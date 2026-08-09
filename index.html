@@ -187,8 +187,13 @@
        * must never be able to select a phrasing the scores contradict.
        * ---------------------------------------------------------------- */
 
-      const STARTER_MIN = 150
-      const STARTER_MAX = 200
+      /* ----------------------------------------------------------------
+       * Justification builder
+       *
+       * Produces a skeleton the rater completes, not a finished answer. The
+       * calculator knows which side won each axis; it cannot see the images,
+       * so every claim about what is actually in them is left as a bracket.
+       * ---------------------------------------------------------------- */
 
       const AXIS_PHRASE = {
         instruction: 'instruction following',
@@ -200,156 +205,183 @@
 
       const AXIS_ORDER = ['instruction', 'personId', 'refPreservation', 'visualQuality', 'artifacts']
 
-      function phraseList(items) {
-        if (items.length <= 1) return items[0] || ''
-        return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1]
+      /** Alternative wordings, so seven people do not submit the same sentence. */
+      const PHRASES = {
+        verdictStrong: [
+          'I strongly prefer Response {W}',
+          'Response {W} is clearly stronger',
+          'This is a strong preference for Response {W}',
+          'Response {W} wins decisively',
+        ],
+        verdictSlight: [
+          'I slightly prefer Response {W}',
+          'Response {W} has a narrow edge',
+          'On balance I lean towards Response {W}',
+          'Response {W} is marginally stronger',
+        ],
+        verdictTie: [
+          'Neither response is stronger overall',
+          'This one is genuinely even',
+          'I cannot separate the two responses',
+        ],
+        wins: [
+          'On {axis}, {W} is stronger: [name the feature and what it does]',
+          'On {axis}, {W} handles [name the feature] correctly, while {L} [name the failure]',
+          '{W} leads on {axis} because [name the feature] is [describe it], whereas {L} [describe the difference]',
+          'Looking at {axis}, {W} gets [name the feature] right and {L} does not: [describe it]',
+        ],
+        even: [
+          '{Axis} is even: both responses [name the shared detail], so it does not separate them',
+          'On {axis} the two are level, since both [name the shared detail], and this does not decide anything',
+          'Neither response gains on {axis}: [name the shared detail] appears in both',
+        ],
+        tradeoffMixed: [
+          'Trade-off: {L} is ahead on {loseList}, but [say why that matters less than what {W} wins on]',
+          'Weighing it up: {L} does take {loseList}, though [explain why {W} still comes out ahead]',
+          'The trade-off is that {W} gives up {loseList}, but [say why the axes it wins matter more here]',
+        ],
+        tradeoffSweep: [
+          'Trade-off: every differentiating flaw sits on {L}\u2019s side, so {W} wins {strength}',
+          'Trade-off: nothing separates them in {L}\u2019s favour, which is why this is {strength}',
+          'Trade-off: {L} carries all the problems that distinguish the two, making this {strength}',
+        ],
       }
 
-      /** Axes the given side won, widest margin first, capped at max. */
-      function axesWonBy(scores, side, max) {
-        return AXIS_ORDER.filter((k) =>
-          side === 'A' ? scores[k] > 0 : scores[k] < 0
-        )
-          .sort((a, b) => Math.abs(scores[b]) - Math.abs(scores[a]))
-          .slice(0, max)
-          .map((k) => AXIS_PHRASE[k])
+      function pickPhrase(list, seed, offset) {
+        return list[(Math.abs(seed + offset)) % list.length]
       }
+
+      function fillPhrase(template, vars) {
+        return template.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? vars[key] : m))
+      }
+
+      const listOf = (items) =>
+        items.length <= 1
+          ? items[0] || ''
+          : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1]
+
+      const capitalise = (t) => t.charAt(0).toUpperCase() + t.slice(1)
 
       /**
-       * All valid phrasings for this result: inside the length window, and
-       * only ever asserting what the scores support.
-       *
-       * A pool rather than one sentence, because a single fixed phrasing means
-       * every tasker submits an identically shaped opener, which is exactly the
-       * templated look the rating guidelines penalise.
-       */
-      function starterVariants(cores, tails) {
-        const seen = {}
-        const all = []
-        cores.forEach((c) =>
-          tails.forEach((t) => {
-            // Different axis widths collapse to the same sentence when a side
-            // won fewer axes than the width asked for. Deduplicate, or the
-            // random pick is biased towards whichever phrasing repeated most.
-            const s = c + t
-            if (seen[s]) return
-            seen[s] = true
-            all.push(s)
-          })
-        )
-        const fits = all.filter((s) => s.length >= STARTER_MIN && s.length <= STARTER_MAX)
-        if (fits.length) return fits.sort((a, b) => b.length - a.length)
-        // No phrasing lands in the window, so fall back to the closest that fits
-        // under the cap. Correctness is never traded for length.
-        const under = all.filter((s) => s.length <= STARTER_MAX)
-        if (under.length) return under.sort((a, b) => b.length - a.length)
-        return all.sort((a, b) => a.length - b.length)
-      }
-
-      const STARTER_TAILS = (W) => [
-        ' The difference is clearest in Image ' + W + ', where ',
-        ' This is most visible in Image ' + W + ', where ',
-        ' Specifically, in Image ' + W + ' ',
-        ' Looking closely, ',
-        ' Zooming in, ',
-        ' In detail, ',
-        ' Most visibly, ',
-      ]
-
-      /** Every phrasing available for these scores, longest first. */
-      function buildStarterVariants(scores, result) {
-        if (!result) return []
-
-        if (result.verdict.side === 'T') {
-          return starterVariants(
-            [
-              'Neither image is clearly preferred. The two are evenly matched across the scored dimensions, and instruction following does not separate them either.',
-              'This is a genuine tie. The two responses match across the scored dimensions, and instruction following does not break it either.',
-              'Neither response is stronger overall. The scored dimensions balance out, and instruction following does not separate them.',
-              'Neither image is clearly preferred. The two are evenly matched across the scored dimensions.',
-            ],
-            [
-              ' The closest thing to a deciding detail is ',
-              ' The deciding details are ',
-              ' Looking closely, ',
-              ' Zooming in, ',
-              ' In detail, ',
-            ]
-          )
-        }
-
-        const W = result.verdict.side
-        const L = W === 'A' ? 'B' : 'A'
-        const loserWon = (W === 'A' ? result.winsB : result.winsA) > 0
-        const split = result.winsA === result.winsB
-        const win = (n) => phraseList(axesWonBy(scores, W, n))
-        const lose = (n) => phraseList(axesWonBy(scores, L, n))
-
-        const cores = []
-        const widths = [3, 2, 1]
-
-        if (split) {
-          // Instruction Following decided it, so every phrasing here says so.
-          cores.push(
-            'Image ' + W + ' is preferred over Image ' + L + ' because the two split evenly across the scored dimensions and ' + W + ' follows the prompt more closely.',
-            'The two responses split evenly across the scored dimensions, so instruction following decides it, and that goes to Image ' + W + '.',
-            'Image ' + W + ' is preferred on the tiebreak: the dimensions split evenly, and ' + W + ' follows the prompt more closely.',
-            'Image ' + W + ' takes it on instruction following. The two are level across the other scored dimensions.',
-            'Image ' + W + ' is preferred over Image ' + L + ' because the dimensions split evenly and ' + W + ' follows the prompt more closely.'
-          )
-        }
-
-        if (loserWon) {
-          // The losing side won something, so no phrasing may imply a sweep.
-          widths.forEach((n) => {
-            cores.push(
-              'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + '. ' + L + ' is stronger on ' + lose(2) + ', but that does not offset the difference.',
-              'Image ' + W + ' is the stronger response, taking ' + win(n) + '. ' + L + ' holds an advantage on ' + lose(2) + ', though not enough to change the call.',
-              'Image ' + W + ' comes out ahead on ' + win(n) + '. ' + L + ' does better on ' + lose(2) + ', but that is the smaller issue here.',
-              'Image ' + W + ' is preferred, winning ' + win(n) + '. The advantage ' + L + ' holds on ' + lose(1) + ' does not outweigh that.',
-              'On balance Image ' + W + ' is preferred: it wins ' + win(n) + ', while ' + L + ' only takes ' + lose(1) + '.',
-              'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + ', while ' + L + ' is only stronger on ' + lose(1) + '.'
-            )
-          })
-        } else {
-          // Only claim a sweep when the other side genuinely won nothing.
-          widths.forEach((n) => {
-            cores.push(
-              'Image ' + W + ' is preferred over Image ' + L + ' because it leads on ' + win(n) + ' while ' + L + ' does not win any dimension outright.',
-              'Image ' + W + ' is the stronger response throughout, taking ' + win(n) + ' without ' + L + ' winning a single dimension.',
-              'Image ' + W + ' is preferred, leading on ' + win(n) + '. Image ' + L + ' does not take any dimension outright.',
-              'Image ' + W + ' wins on ' + win(n) + ', and Image ' + L + ' does not come out ahead anywhere.',
-              'Every dimension that separates the two favours Image ' + W + ', which leads on ' + win(n) + '.',
-              // Longer forms, so a win on a single short-named axis still has
-              // several phrasings that reach the minimum length.
-              'Image ' + W + ' is preferred over Image ' + L + ' because it clearly leads on ' + win(n) + ', and Image ' + L + ' does not win any of the remaining dimensions outright.',
-              'Image ' + W + ' is preferred over Image ' + L + '. It takes ' + win(n) + ', the remaining scored dimensions are level, and Image ' + L + ' does not win anywhere.',
-              'The two responses are close on most of the scored dimensions, but Image ' + W + ' leads on ' + win(n) + ' and Image ' + L + ' does not win any dimension outright.',
-              'Image ' + W + ' is preferred over Image ' + L + ' because it is the only response to win a scored dimension outright, coming out ahead on ' + win(n) + '.'
-            )
-          })
-        }
-
-        return starterVariants(cores, STARTER_TAILS(W))
-      }
-
-      /** Stable per score set, varied per seed. */
-      function hashScores(scores) {
-        const s = AXIS_ORDER.map((k) => (scores[k] === undefined ? 'x' : scores[k])).join(',')
-        let h = 0
-        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
-        return Math.abs(h)
-      }
-
-      /**
-       * Pick one phrasing. Deterministic for a given score set and seed, so the
-       * text does not flicker between renders, but a new seed rewords it.
+       * Build the justification skeleton for a scored task.
+       * Returns null while any axis is unscored.
        */
       function buildStarter(scores, result, seed) {
-        const variants = buildStarterVariants(scores, result)
-        if (!variants.length) return null
-        const offset = hashScores(scores) + (seed || 0)
-        return variants[offset % variants.length]
+        if (!result) return null
+        const s = seed || 0
+        const W = result.verdict.side
+        const L = W === 'A' ? 'B' : 'A'
+        const strong = result.verdict.label.indexOf('Strongly') === 0
+        const axes = AXIS_ORDER.filter((k) => scores[k] !== undefined)
+
+        const lines = []
+
+        // 1. The verdict, first, so the reader knows where this is going.
+        if (W === 'T') {
+          lines.push(pickPhrase(PHRASES.verdictTie, s, 0) + '.')
+        } else {
+          const pool = strong ? PHRASES.verdictStrong : PHRASES.verdictSlight
+          lines.push(fillPhrase(pickPhrase(pool, s, 0), { W }) + '.')
+        }
+
+        // 2. One clause per axis, in the order the rubric lists them.
+        axes.forEach((k, i) => {
+          const v = scores[k]
+          const axis = AXIS_PHRASE[k]
+          if (v === 0) {
+            lines.push(
+              fillPhrase(pickPhrase(PHRASES.even, s, i + 1), {
+                axis,
+                Axis: capitalise(axis),
+              }) + '.'
+            )
+          } else {
+            const winner = v > 0 ? 'A' : 'B'
+            const loser = v > 0 ? 'B' : 'A'
+            lines.push(
+              fillPhrase(pickPhrase(PHRASES.wins, s, i + 1), {
+                axis,
+                Axis: capitalise(axis),
+                W: winner,
+                L: loser,
+              }) + '.'
+            )
+          }
+        })
+
+        // 3. The trade off, which is the part reviewers say is most often missing.
+        if (W !== 'T') {
+          const lost = axes.filter((k) => (W === 'A' ? scores[k] < 0 : scores[k] > 0)).map((k) => AXIS_PHRASE[k])
+          const strength = strong ? 'strongly' : 'only slightly'
+          if (lost.length) {
+            lines.push(
+              fillPhrase(pickPhrase(PHRASES.tradeoffMixed, s, 9), {
+                W,
+                L,
+                loseList: listOf(lost),
+                strength,
+              }) + '.'
+            )
+          } else {
+            lines.push(
+              fillPhrase(pickPhrase(PHRASES.tradeoffSweep, s, 9), { W, L, strength }) + '.'
+            )
+          }
+        } else {
+          lines.push(
+            'Trade-off: [say what you compared and why it came out even, rather than leaving it unexplained].'
+          )
+        }
+
+        return lines.join(' ')
+      }
+
+      /** Every wording available for a slot, so the rater can swap any sentence. */
+      function starterAlternatives(scores, result) {
+        if (!result) return []
+        const W = result.verdict.side
+        const L = W === 'A' ? 'B' : 'A'
+        const strong = result.verdict.label.indexOf('Strongly') === 0
+        const out = []
+
+        const verdictPool =
+          W === 'T' ? PHRASES.verdictTie : strong ? PHRASES.verdictStrong : PHRASES.verdictSlight
+        out.push({
+          slot: 'Opening',
+          options: verdictPool.map((t) => fillPhrase(t, { W })),
+        })
+
+        out.push({
+          slot: 'An axis one side wins',
+          options: PHRASES.wins.map((t) =>
+            fillPhrase(t, { axis: 'visual quality', Axis: 'Visual quality', W, L })
+          ),
+        })
+
+        out.push({
+          slot: 'An axis that is even',
+          options: PHRASES.even.map((t) =>
+            fillPhrase(t, { axis: 'reference preservation', Axis: 'Reference preservation' })
+          ),
+        })
+
+        const lost = AXIS_ORDER.filter(
+          (k) => scores[k] !== undefined && (W === 'A' ? scores[k] < 0 : scores[k] > 0)
+        ).map((k) => AXIS_PHRASE[k])
+        const pool = lost.length ? PHRASES.tradeoffMixed : PHRASES.tradeoffSweep
+        out.push({
+          slot: 'Trade-off',
+          options: pool.map((t) =>
+            fillPhrase(t, {
+              W,
+              L,
+              loseList: listOf(lost.length ? lost : ['that axis']),
+              strength: strong ? 'strongly' : 'only slightly',
+            })
+          ),
+        })
+
+        return out
       }
 
       /* ---8<--- SCORING END */
@@ -501,7 +533,8 @@
         )
       }
 
-      function FeedbackStarter({ text, onReword }) {
+      function FeedbackStarter({ text, alternatives, onReword }) {
+        const [showBank, setShowBank] = useState(false)
         // 'idle' | 'copied' | 'manual'. 'manual' means both copy paths were
         // refused, so the text is selected and the user finishes with Ctrl+C.
         const [status, setStatus] = useState('idle')
@@ -509,6 +542,8 @@
 
         // Reset whenever the scores change the text underneath the button.
         useEffect(() => setStatus('idle'), [text])
+
+        const words = text.trim().split(/\s+/).length
 
         /** Legacy path: works without clipboard permission, needs a live selection. */
         const copyViaTextarea = () => {
@@ -571,19 +606,24 @@
           <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                Open feedback starter
+                Justification skeleton
               </h3>
-              <span className="rounded-md bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-400">
-                {text.length} chars
+              <span
+                className={cx(
+                  'rounded-md px-2 py-1 text-xs font-semibold',
+                  words >= 20 ? 'bg-slate-800/80 text-slate-400' : 'bg-rose-500/20 text-rose-300'
+                )}
+                title="Answers under 20 words are rejected"
+              >
+                {words} words
               </span>
             </div>
 
             <p
               ref={textRef}
-              className="mt-3 rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-300 selection:bg-indigo-500/40"
+              className="mt-3 max-h-72 overflow-y-auto rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-300 selection:bg-indigo-500/40"
             >
               {text}
-              <span className="text-slate-600">...</span>
             </p>
 
             <button
@@ -597,7 +637,7 @@
                     : 'bg-indigo-500 text-white hover:bg-indigo-400'
               )}
             >
-              {copied ? 'Copied' : status === 'manual' ? 'Selected, press Ctrl+C' : 'Copy starter'}
+              {copied ? 'Copied' : status === 'manual' ? 'Selected, press Ctrl+C' : 'Copy skeleton'}
             </button>
 
             <button
@@ -608,9 +648,43 @@
             </button>
 
             <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
-              Finish the sentence with what you actually saw, and where. Name the
-              specific tell rather than saying one looks better.
+              Replace every [bracket] with the person and the feature you actually saw,
+              such as "ref 3's glasses turn solid white in B", never "B looks better".
+              The trade-off sentence is the part reviewers most often find missing.
             </p>
+
+            {alternatives && alternatives.length > 0 && (
+              <div className="mt-3 border-t border-slate-800 pt-3">
+                <button
+                  onClick={() => setShowBank((v) => !v)}
+                  className="flex w-full items-center justify-between text-xs font-semibold text-slate-400 transition hover:text-slate-200"
+                >
+                  <span>Other ways to say it</span>
+                  <span>{showBank ? 'hide' : 'show'}</span>
+                </button>
+                {showBank && (
+                  <div className="mt-3 space-y-3">
+                    {alternatives.map((group) => (
+                      <div key={group.slot}>
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          {group.slot}
+                        </div>
+                        <ul className="mt-1 space-y-1">
+                          {group.options.map((opt, i) => (
+                            <li
+                              key={i}
+                              className="rounded-lg bg-slate-950/50 px-2.5 py-1.5 text-xs leading-relaxed text-slate-400"
+                            >
+                              {opt}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )
       }
@@ -645,6 +719,7 @@
         // with the same sentence. Reshuffle bumps it on demand.
         const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
         const starter = useMemo(() => buildStarter(scores, result, seed), [scores, result, seed])
+        const alternatives = useMemo(() => starterAlternatives(scores, result), [scores, result])
 
         // Keyboard shortcuts: 1 to 5 scores the next unfilled axis, Backspace undoes the last one.
         useEffect(() => {
@@ -735,6 +810,7 @@
                     {starter && (
                       <FeedbackStarter
                         text={starter}
+                        alternatives={alternatives}
                         onReword={() => setSeed((s) => s + 1)}
                       />
                     )}
