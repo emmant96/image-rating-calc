@@ -100,6 +100,26 @@
         { value: -2, label: 'Strongly B', side: 'B' },
       ]
 
+      /**
+       * Not applicable, for an axis that cannot be judged on this pair at all.
+       *
+       * This is not a Tie. A Tie says the two responses performed the same on a
+       * dimension that was there to be judged; N/A says the dimension does not
+       * exist here, as when no person appears in the reference and there is no
+       * identity to preserve. Keeping them apart matters because a Tie is worth
+       * explaining in the justification and an N/A is not.
+       */
+      const NA = 'na'
+      const NA_OPTION = { value: NA, label: 'N/A', side: 'N' }
+
+      /** Axes that can be marked not applicable. */
+      const NA_AXES = { personId: true }
+
+      const optionsFor = (axisKey) =>
+        NA_AXES[axisKey] ? OPTIONS.concat([NA_OPTION]) : OPTIONS
+
+      const isScored = (v) => typeof v === 'number'
+
       const VERDICTS = {
         STRONG_A: { label: 'Strongly A', side: 'A' },
         SLIGHT_A: { label: 'Slightly A', side: 'A' },
@@ -135,9 +155,12 @@
         const values = axisKeys.map((k) => scores[k])
         if (values.some((v) => v === undefined || v === null)) return null
 
-        const winsA = values.filter((v) => v > 0).length
-        const winsB = values.filter((v) => v < 0).length
-        const net = values.reduce((sum, v) => sum + v, 0)
+        // An axis marked not applicable is excluded outright rather than
+        // treated as a zero, so it cannot drag the net total or the axis count.
+        const scored = values.filter(isScored)
+        const winsA = scored.filter((v) => v > 0).length
+        const winsB = scored.filter((v) => v < 0).length
+        const net = scored.reduce((sum, v) => sum + v, 0)
         const base = { winsA, winsB, net }
 
         // Equal category wins means a true dimension split, so Instruction Following decides.
@@ -146,7 +169,7 @@
         const aWins = winsA > winsB
         const winner = aWins ? 'A' : 'B'
         const wins = aWins ? winsA : winsB
-        const total = axisKeys.length
+        const total = scored.length
 
         const strong =
           taskId === 'r2i'
@@ -235,6 +258,11 @@
           'On {axis} the two are level, since both [name the shared detail], and this does not decide anything',
           'Neither response gains on {axis}: [name the shared detail] appears in both',
         ],
+        notApplicable: [
+          '{Axis} does not apply here: [say why, for example no person appears in the reference]',
+          '{Axis} is out of scope for this pair, since [say what the reference actually shows]',
+          'There is no identity to preserve in this pair, so {axis} does not apply: [note what the images show instead]',
+        ],
         tradeoffMixed: [
           'Trade-off: {L} is ahead on {loseList}, but [say why that matters less than what {W} wins on]',
           'Weighing it up: {L} does take {loseList}, though [explain why {W} still comes out ahead]',
@@ -288,7 +316,16 @@
         axes.forEach((k, i) => {
           const v = scores[k]
           const axis = AXIS_PHRASE[k]
-          if (v === 0) {
+          if (v === NA) {
+            // Not the same as a tie: there was nothing to judge, so the rater
+            // is asked why rather than asked to describe a shared detail.
+            lines.push(
+              fillPhrase(pickPhrase(PHRASES.notApplicable, s, i + 1), {
+                axis,
+                Axis: capitalise(axis),
+              }) + '.'
+            )
+          } else if (v === 0) {
             lines.push(
               fillPhrase(pickPhrase(PHRASES.even, s, i + 1), {
                 axis,
@@ -365,6 +402,15 @@
           ),
         })
 
+        if (AXIS_ORDER.some((k) => scores[k] === NA)) {
+          out.push({
+            slot: 'An axis that does not apply',
+            options: PHRASES.notApplicable.map((t) =>
+              fillPhrase(t, { axis: 'person ID', Axis: 'Person ID' })
+            ),
+          })
+        }
+
         const lost = AXIS_ORDER.filter(
           (k) => scores[k] !== undefined && (W === 'A' ? scores[k] < 0 : scores[k] > 0)
         ).map((k) => AXIS_PHRASE[k])
@@ -405,6 +451,13 @@
           card: 'bg-slate-500/10 border-slate-400/40 ring-slate-400/20',
           chip: 'bg-slate-400 text-slate-950',
           pill: 'bg-slate-300 text-slate-900 shadow-slate-400/30',
+        },
+        // Not applicable is deliberately understated. It is not a judgement, so
+        // it should not look like one sitting beside the four that are.
+        N: {
+          card: 'bg-slate-500/10 border-slate-400/40 ring-slate-400/20',
+          chip: 'bg-slate-600 text-slate-100',
+          pill: 'bg-slate-600 text-slate-100 shadow-slate-700/30',
         },
       }
 
@@ -449,8 +502,15 @@
               </div>
             </div>
 
-            <div role="radiogroup" aria-label={axis.title} className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {OPTIONS.map((opt) => {
+            <div
+              role="radiogroup"
+              aria-label={axis.title}
+              className={cx(
+                'mt-5 grid grid-cols-2 gap-2',
+                optionsFor(axis.key).length > 5 ? 'sm:grid-cols-6' : 'sm:grid-cols-5'
+              )}
+            >
+              {optionsFor(axis.key).map((opt) => {
                 const active = value === opt.value
                 const theme = SIDE_THEME[opt.side]
                 return (
@@ -726,10 +786,15 @@
           if (!task) return
           const onKey = (e) => {
             if (e.metaKey || e.ctrlKey || e.altKey) return
-            const idx = ['1', '2', '3', '4', '5'].indexOf(e.key)
+            const idx = ['1', '2', '3', '4', '5', '6'].indexOf(e.key)
             if (idx !== -1) {
               const nextAxis = task.axes.find((k) => scores[k] === undefined)
-              if (nextAxis) setScore(nextAxis, OPTIONS[idx].value)
+              // 6 only exists on an axis that offers N/A, so elsewhere it is
+              // ignored rather than selecting nothing.
+              if (nextAxis) {
+                const opts = optionsFor(nextAxis)
+                if (idx < opts.length) setScore(nextAxis, opts[idx].value)
+              }
               return
             }
             if (e.key === 'Backspace') {

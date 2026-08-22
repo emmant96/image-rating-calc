@@ -18,11 +18,11 @@ function loadEngine() {
   const end = html.lastIndexOf('/*', endMarker)
   const source = html.slice(start, end)
   return new Function(
-    source + '\n return { computeResult, TASKS, buildStarter, starterAlternatives }'
+    source + '\n return { computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA }'
   )()
 }
 
-const { computeResult, TASKS, buildStarter, starterAlternatives } = loadEngine()
+const { computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA } = loadEngine()
 
 const r2i = ([instruction, personId, refPreservation, visualQuality, artifacts]) =>
   computeResult('r2i', { instruction, personId, refPreservation, visualQuality, artifacts })
@@ -476,4 +476,76 @@ test('the trainee result screen never reveals the answer key', () => {
   assert.equal(app.includes('q.options[q.answer]'), false, 'shows the correct option')
   assert.equal(app.includes('{q.why}'), false, 'shows the explanation')
   assert.equal(app.includes('Answer:'), false, 'labels the correct answer')
+})
+
+/* ---------------- not applicable ---------------- */
+
+test('N/A is offered on person ID and nowhere else', () => {
+  const labels = (k) => optionsFor(k).map((o) => o.label)
+  assert.ok(labels('personId').includes('N/A'), 'person ID should offer N/A')
+  for (const k of ['instruction', 'refPreservation', 'visualQuality', 'artifacts']) {
+    assert.ok(!labels(k).includes('N/A'), `${k} should not offer N/A`)
+  }
+})
+
+test('N/A is excluded from the arithmetic rather than counted as zero', () => {
+  const withNA = { instruction: 2, personId: NA, refPreservation: 1, visualQuality: 0, artifacts: 0 }
+  const r = computeResult('r2i', withNA)
+
+  // The classic bug here is string concatenation: 0 + 'na' yields "0na".
+  assert.equal(typeof r.net, 'number', 'net must stay numeric with an N/A present')
+  assert.equal(r.net, 3)
+  assert.equal(r.winsA, 2)
+  assert.equal(r.winsB, 0)
+  assert.equal(r.verdict.label, 'Strongly A')
+})
+
+test('an N/A axis does not count towards a clean sweep', () => {
+  // A wins the three judgeable axes and person ID does not apply, so this is a
+  // sweep of everything that could be judged.
+  const scores = { instruction: 1, personId: NA, refPreservation: 1, visualQuality: 1, artifacts: 0 }
+  const r = computeResult('r2i', scores)
+  assert.equal(r.winsA, 3)
+  assert.equal(r.winsB, 0)
+  assert.equal(r.verdict.label, 'Strongly A', 'net of +3 should still read as strong')
+})
+
+test('N/A and Tie produce different justification wording', () => {
+  const base = { instruction: 2, refPreservation: 0, visualQuality: -1, artifacts: -1 }
+  const tied = buildStarter({ ...base, personId: 0 }, computeResult('r2i', { ...base, personId: 0 }), 0)
+  const na = buildStarter({ ...base, personId: NA }, computeResult('r2i', { ...base, personId: NA }), 0)
+
+  assert.notEqual(tied, na, 'a tie and a not applicable must not read the same')
+  assert.match(na, /person ID (does not apply|is out of scope)|no identity to preserve/i)
+  // A tie asks for the shared detail; N/A must not, because there was nothing to compare.
+  assert.doesNotMatch(
+    na.split('.').find((l) => /person ID|identity/i.test(l)) || '',
+    /shared detail/i,
+    'N/A should not ask for a shared detail'
+  )
+})
+
+test('the rephrase bank gains an N/A slot only when one is used', () => {
+  const base = { instruction: 2, refPreservation: 0, visualQuality: -1, artifacts: -1 }
+  const slots = (personId) => {
+    const sc = { ...base, personId }
+    return starterAlternatives(sc, computeResult('r2i', sc)).map((g) => g.slot)
+  }
+  assert.ok(slots(NA).some((s) => /does not apply/i.test(s)), 'expected an N/A slot')
+  assert.ok(!slots(0).some((s) => /does not apply/i.test(s)), 'N/A slot should be absent on a tie')
+})
+
+test('every N/A combination still produces a usable skeleton', () => {
+  const values = [2, 1, 0, -1, -2]
+  for (const i of values) {
+    for (const rp of values) {
+      for (const vq of values) {
+        const scores = { instruction: i, personId: NA, refPreservation: rp, visualQuality: vq, artifacts: 0 }
+        const text = buildStarter(scores, computeResult('r2i', scores), 0)
+        assert.ok(text.trim().split(/\s+/).length >= 40, `too short: ${text}`)
+        assert.match(text, /Trade-off:/)
+        assert.ok(!text.includes('undefined') && !text.includes('NaN'), `bad token in: ${text}`)
+      }
+    }
+  }
 })
