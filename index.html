@@ -90,7 +90,57 @@
           tagline: 'You start with only words. The whole picture is made from scratch, so following the words is what matters.',
           axes: ['instruction', 'visualQuality', 'artifacts'],
         },
+        ti2t: {
+          id: 'ti2t',
+          label: 'Text and Image to Text',
+          short: 'TI2T',
+          tagline: 'Two written answers about the same picture. You rate each answer on its own, then say which you prefer.',
+          // Rated per response rather than head to head, so this task uses the
+          // issue scale below instead of the five point preference scale.
+          mode: 'issues',
+          axes: ['factuality', 'instruction', 'helpfulness', 'style'],
+        },
       }
+
+      /** Dimensions for the issue style task. */
+      const ISSUE_AXES = {
+        factuality: {
+          key: 'factuality',
+          title: 'Factuality',
+          blurb:
+            'Is everything it says true, and does it match what is actually visible in the picture? Invented details and wrong facts belong here.',
+        },
+        instruction: {
+          key: 'instruction',
+          title: 'Instruction Following',
+          blurb:
+            'Did it do what the prompt asked, including any format the prompt named, such as a set number of lines? Staying on topic counts here too.',
+        },
+        helpfulness: {
+          key: 'helpfulness',
+          title: 'Helpfulness',
+          blurb:
+            'Does it actually answer what the person wanted? A reply can be true and still unhelpful if it dodges the real question.',
+        },
+        style: {
+          key: 'style',
+          title: 'Style and Format',
+          blurb:
+            'Is it well written and easy to read? Penalise needless repetition, padding, and speculation dressed up as fact.',
+        },
+      }
+
+      /**
+       * Each response is rated on its own, so these are penalties rather than
+       * preferences: the higher the number, the worse that response did.
+       */
+      const ISSUE_OPTIONS = [
+        { value: 0, label: 'No Issue' },
+        { value: 1, label: 'Minor Issue' },
+        { value: 2, label: 'Major Issue' },
+      ]
+
+      const ISSUE_WORD = { 0: 'no issue', 1: 'a minor issue', 2: 'a major issue' }
 
       const OPTIONS = [
         { value: 2, label: 'Strongly A', side: 'A' },
@@ -430,6 +480,206 @@
         return out
       }
 
+      /* ----------------------------------------------------------------
+       * Issue style scoring, for the text answer task
+       *
+       * Each response carries its own penalty per dimension: no issue 0, minor
+       * 1, major 2. The gap on a dimension is B minus A, so a positive number
+       * favours A.
+       *
+       * The published guidelines for this task do not state how the dimension
+       * ratings combine into an overall preference, so this is a suggestion
+       * rather than a rule. It leads on the summed gap, because severity is the
+       * whole point of a three level scale, and reports the dimension count
+       * beside it so the rater can disagree on sight.
+       * ---------------------------------------------------------------- */
+
+      const ISSUE_AXIS_ORDER = ['factuality', 'instruction', 'helpfulness', 'style']
+
+      function issueGaps(scores) {
+        return ISSUE_AXIS_ORDER.map((k) => {
+          const v = scores[k]
+          if (!v || !isScored(v.a) || !isScored(v.b)) return null
+          return { key: k, a: v.a, b: v.b, gap: v.b - v.a }
+        })
+      }
+
+      /** Returns null until both responses are rated on every dimension. */
+      function computeIssueResult(scores) {
+        const gaps = issueGaps(scores)
+        if (gaps.some((g) => g === null)) return null
+
+        const total = gaps.reduce((n, g) => n + g.gap, 0)
+        const winsA = gaps.filter((g) => g.gap > 0).length
+        const winsB = gaps.filter((g) => g.gap < 0).length
+        const base = { winsA, winsB, net: total, gaps }
+
+        if (total === 0) {
+          const why =
+            winsA === 0 && winsB === 0
+              ? 'Both responses were rated the same on every dimension, so nothing separates them.'
+              : 'A leads on ' + winsA + ' dimension(s) and B on ' + winsB +
+                ', and the severity cancels out exactly, so it comes out even.'
+          return Object.assign({}, base, { verdict: VERDICTS.TIE, why })
+        }
+
+        const aWins = total > 0
+        const W = aWins ? 'A' : 'B'
+        const strong = Math.abs(total) >= 3
+        const verdict = aWins
+          ? strong
+            ? VERDICTS.STRONG_A
+            : VERDICTS.SLIGHT_A
+          : strong
+            ? VERDICTS.STRONG_B
+            : VERDICTS.SLIGHT_B
+
+        const why =
+          W + ' carries ' + Math.abs(total) + ' fewer issue point(s) across the four dimensions, ' +
+          'leading on ' + (aWins ? winsA : winsB) + ' of them. ' +
+          (strong ? 'That is a wide gap.' : 'That is a narrow gap.')
+
+        return Object.assign({}, base, { verdict, why })
+      }
+
+      const ISSUE_PHRASES = {
+        oneSided: [
+          'On {axis}, Response {W} has {wLevel} while Response {L} has {lLevel}: [name what {L} gets wrong]',
+          '{Axis} favours Response {W}, which has {wLevel} against {lLevel} for {L}, because [name the problem in {L}]',
+          'Looking at {axis}, {L} has {lLevel} where {W} has {wLevel}: [say exactly what the problem is]',
+        ],
+        sharedClean: [
+          'On {axis}, neither response has an issue: [note what both get right], so this does not separate them',
+          'Both responses handle {axis} cleanly, since [note what both get right], and it does not decide anything',
+        ],
+        sharedFault: [
+          'On {axis}, both responses have {level}: [name what each gets wrong], so this does not separate them',
+          'Both sides share {level} on {axis}, since [name the shared problem], and it cancels out',
+        ],
+      }
+
+      /** The justification skeleton for the text answer task. */
+      function buildIssueStarter(scores, result, seed) {
+        if (!result) return null
+        const s = seed || 0
+        const W = result.verdict.side
+        const L = W === 'A' ? 'B' : 'A'
+        const strong = result.verdict.label.indexOf('Strongly') === 0
+        const lines = []
+
+        if (W === 'T') {
+          lines.push(pickPhrase(PHRASES.verdictTie, s, 0) + '.')
+        } else {
+          const pool = strong ? PHRASES.verdictStrong : PHRASES.verdictSlight
+          lines.push(fillPhrase(pickPhrase(pool, s, 0), { W }) + '.')
+        }
+
+        result.gaps.forEach((g, i) => {
+          const axis = ISSUE_AXES[g.key].title.toLowerCase()
+          const Axis = ISSUE_AXES[g.key].title
+          if (g.gap === 0) {
+            const pool = g.a === 0 ? ISSUE_PHRASES.sharedClean : ISSUE_PHRASES.sharedFault
+            lines.push(
+              fillPhrase(pickPhrase(pool, s, i + 1), { axis, Axis, level: ISSUE_WORD[g.a] }) + '.'
+            )
+          } else {
+            const winner = g.gap > 0 ? 'A' : 'B'
+            const loser = g.gap > 0 ? 'B' : 'A'
+            lines.push(
+              fillPhrase(pickPhrase(ISSUE_PHRASES.oneSided, s, i + 1), {
+                axis,
+                Axis,
+                W: winner,
+                L: loser,
+                wLevel: ISSUE_WORD[winner === 'A' ? g.a : g.b],
+                lLevel: ISSUE_WORD[loser === 'A' ? g.a : g.b],
+              }) + '.'
+            )
+          }
+        })
+
+        if (W === 'T') {
+          lines.push(
+            'Trade-off: [say what you compared and why it came out even, rather than leaving it unexplained].'
+          )
+        } else {
+          const lost = result.gaps
+            .filter((g) => (W === 'A' ? g.gap < 0 : g.gap > 0))
+            .map((g) => ISSUE_AXES[g.key].title.toLowerCase())
+          const strength = strong ? 'strongly' : 'only slightly'
+          if (lost.length) {
+            lines.push(
+              fillPhrase(pickPhrase(PHRASES.tradeoffMixed, s, 9), {
+                W,
+                L,
+                loseList: listOf(lost),
+                strength,
+              }) + '.'
+            )
+          } else {
+            lines.push(fillPhrase(pickPhrase(PHRASES.tradeoffSweep, s, 9), { W, L, strength }) + '.')
+          }
+        }
+
+        return lines.join(' ')
+      }
+
+      function issueAlternatives(scores, result) {
+        if (!result) return []
+        const W = result.verdict.side
+        const L = W === 'A' ? 'B' : 'A'
+        const strong = result.verdict.label.indexOf('Strongly') === 0
+        const out = []
+
+        out.push({
+          slot: 'Opening',
+          options: (W === 'T'
+            ? PHRASES.verdictTie
+            : strong
+              ? PHRASES.verdictStrong
+              : PHRASES.verdictSlight
+          ).map((t) => fillPhrase(t, { W })),
+        })
+        out.push({
+          slot: 'A dimension one side wins',
+          options: ISSUE_PHRASES.oneSided.map((t) =>
+            fillPhrase(t, {
+              axis: 'factuality',
+              Axis: 'Factuality',
+              W: W === 'T' ? 'A' : W,
+              L: W === 'T' ? 'B' : L,
+              wLevel: 'no issue',
+              lLevel: 'a minor issue',
+            })
+          ),
+        })
+        out.push({
+          slot: 'A dimension where both share a fault',
+          options: ISSUE_PHRASES.sharedFault.map((t) =>
+            fillPhrase(t, {
+              axis: 'instruction following',
+              Axis: 'Instruction following',
+              level: 'a minor issue',
+            })
+          ),
+        })
+        const lost = result.gaps
+          .filter((g) => (W === 'A' ? g.gap < 0 : g.gap > 0))
+          .map((g) => ISSUE_AXES[g.key].title.toLowerCase())
+        out.push({
+          slot: 'Trade-off',
+          options: (lost.length ? PHRASES.tradeoffMixed : PHRASES.tradeoffSweep).map((t) =>
+            fillPhrase(t, {
+              W: W === 'T' ? 'A' : W,
+              L: W === 'T' ? 'B' : L,
+              loseList: listOf(lost.length ? lost : ['that dimension']),
+              strength: strong ? 'strongly' : 'only slightly',
+            })
+          ),
+        })
+        return out
+      }
+
       /* ---8<--- SCORING END */
 
       /* ================================================================
@@ -532,6 +782,76 @@
                 )
               })}
             </div>
+          </section>
+        )
+      }
+
+      /**
+       * One dimension of the text answer task. Both responses are rated here,
+       * because this task asks how each one did rather than which one won.
+       */
+      function IssueRow({ axis, index, value, onChange }) {
+        const v = value || {}
+        const gap = isScored(v.a) && isScored(v.b) ? v.b - v.a : null
+
+        const side = (which) => (
+          <div className="flex-1">
+            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+              Response {which.toUpperCase()}
+            </div>
+            <div role="radiogroup" aria-label={axis.title + ' response ' + which} className="grid gap-2">
+              {ISSUE_OPTIONS.map((opt) => {
+                const active = v[which] === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => onChange(axis.key, which, active ? undefined : opt.value)}
+                    className={cx(
+                      'rounded-xl px-3 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                      active
+                        ? opt.value === 0
+                          ? 'bg-emerald-500 text-emerald-950'
+                          : opt.value === 1
+                            ? 'bg-amber-500 text-amber-950'
+                            : 'bg-rose-500 text-rose-950'
+                        : 'bg-slate-800/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+
+        return (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 transition hover:border-slate-700 sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-800 text-xs font-bold text-slate-400">
+                {index + 1}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-slate-100 sm:text-lg">{axis.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{axis.blurb}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex gap-4">
+              {side('a')}
+              {side('b')}
+            </div>
+
+            {gap !== null && (
+              <p className="mt-3 text-center text-xs text-slate-500">
+                {gap === 0
+                  ? 'Level on this dimension, so it does not separate them.'
+                  : (gap > 0 ? 'A' : 'B') + ' is ahead here by ' + Math.abs(gap) + ' point' +
+                    (Math.abs(gap) === 1 ? '' : 's') + '.'}
+              </p>
+            )}
           </section>
         )
       }
@@ -671,11 +991,13 @@
               <span
                 className={cx(
                   'rounded-md px-2 py-1 text-xs font-semibold',
-                  words >= 20 ? 'bg-slate-800/80 text-slate-400' : 'bg-rose-500/20 text-rose-300'
+                  words >= 20 && text.length >= 100
+                    ? 'bg-slate-800/80 text-slate-400'
+                    : 'bg-rose-500/20 text-rose-300'
                 )}
-                title="Answers under 20 words are rejected"
+                title="Answers under 20 words are rejected, and this task needs at least 100 characters"
               >
-                {words} words
+                {words} words &middot; {text.length} chars
               </span>
             </div>
 
@@ -759,6 +1081,23 @@
 
         const task = taskId ? TASKS[taskId] : null
 
+        /**
+         * Set one side of an issue rating, merging against the latest state
+         * rather than the value this row rendered with. Rating A and then B in
+         * quick succession would otherwise drop the first of the two.
+         */
+        const setIssue = useCallback((axisKey, which, value) => {
+          setScores((prev) => {
+            const merged = Object.assign({}, prev[axisKey], { [which]: value })
+            if (merged.a === undefined && merged.b === undefined) {
+              const next = Object.assign({}, prev)
+              delete next[axisKey]
+              return next
+            }
+            return Object.assign({}, prev, { [axisKey]: merged })
+          })
+        }, [])
+
         const setScore = useCallback((axisKey, value) => {
           setScores((prev) => {
             const next = Object.assign({}, prev)
@@ -773,17 +1112,33 @@
           setScores({})
         }
 
-        const filled = task ? task.axes.filter((k) => scores[k] !== undefined).length : 0
-        const result = useMemo(() => (task ? computeResult(task.id, scores) : null), [task, scores])
+        const issueMode = !!(task && task.mode === 'issues')
+        const filled = !task
+          ? 0
+          : issueMode
+            ? task.axes.filter((k) => scores[k] && isScored(scores[k].a) && isScored(scores[k].b)).length
+            : task.axes.filter((k) => scores[k] !== undefined).length
+        const result = useMemo(
+          () => (!task ? null : issueMode ? computeIssueResult(scores) : computeResult(task.id, scores)),
+          [task, issueMode, scores]
+        )
         // Random at page load, so two taskers on the same scores do not open
         // with the same sentence. Reshuffle bumps it on demand.
         const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
-        const starter = useMemo(() => buildStarter(scores, result, seed), [scores, result, seed])
-        const alternatives = useMemo(() => starterAlternatives(scores, result), [scores, result])
+        const starter = useMemo(
+          () => (issueMode ? buildIssueStarter(scores, result, seed) : buildStarter(scores, result, seed)),
+          [issueMode, scores, result, seed]
+        )
+        const alternatives = useMemo(
+          () => (issueMode ? issueAlternatives(scores, result) : starterAlternatives(scores, result)),
+          [issueMode, scores, result]
+        )
 
         // Keyboard shortcuts: 1 to 5 scores the next unfilled axis, Backspace undoes the last one.
         useEffect(() => {
-          if (!task) return
+          // The number keys pick one option per row, which does not fit a task
+          // that asks for two ratings per row, so they are disabled there.
+          if (!task || task.mode === 'issues') return
           const onKey = (e) => {
             if (e.metaKey || e.ctrlKey || e.altKey) return
             const idx = ['1', '2', '3', '4', '5', '6'].indexOf(e.key)
@@ -856,18 +1211,27 @@
                   <div className="space-y-4">
                     <div className="flex items-baseline justify-between">
                       <h2 className="text-xl font-semibold text-slate-50">
-                        {task.label} <span className="text-slate-500">&middot; {task.axes.length} axes</span>
+                        {task.label}{' '}
+                        <span className="text-slate-500">
+                          &middot; {task.axes.length} {issueMode ? 'dimensions' : 'axes'}
+                        </span>
                       </h2>
-                      <span className="hidden text-xs text-slate-500 sm:block">
-                        Keys <kbd className="rounded bg-slate-800 px-1.5 py-0.5">1</kbd> to{' '}
-                        <kbd className="rounded bg-slate-800 px-1.5 py-0.5">5</kbd> to score,{' '}
-                        <kbd className="rounded bg-slate-800 px-1.5 py-0.5">&#9003;</kbd> to undo
-                      </span>
+                      {!issueMode && (
+                        <span className="hidden text-xs text-slate-500 sm:block">
+                          Keys <kbd className="rounded bg-slate-800 px-1.5 py-0.5">1</kbd> to{' '}
+                          <kbd className="rounded bg-slate-800 px-1.5 py-0.5">5</kbd> to score,{' '}
+                          <kbd className="rounded bg-slate-800 px-1.5 py-0.5">&#9003;</kbd> to undo
+                        </span>
+                      )}
                     </div>
 
-                    {task.axes.map((key, i) => (
-                      <AxisRow key={key} index={i} axis={AXES[key]} value={scores[key]} onChange={setScore} />
-                    ))}
+                    {task.axes.map((key, i) =>
+                      issueMode ? (
+                        <IssueRow key={key} index={i} axis={ISSUE_AXES[key]} value={scores[key]} onChange={setIssue} />
+                      ) : (
+                        <AxisRow key={key} index={i} axis={AXES[key]} value={scores[key]} onChange={setScore} />
+                      )
+                    )}
                   </div>
 
                   <aside className="lg:sticky lg:top-8">

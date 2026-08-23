@@ -18,11 +18,14 @@ function loadEngine() {
   const end = html.lastIndexOf('/*', endMarker)
   const source = html.slice(start, end)
   return new Function(
-    source + '\n return { computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA }'
+    source + '\n return { computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA, computeIssueResult, buildIssueStarter, issueAlternatives }'
   )()
 }
 
-const { computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA } = loadEngine()
+const {
+  computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA,
+  computeIssueResult, buildIssueStarter, issueAlternatives,
+} = loadEngine()
 
 const r2i = ([instruction, personId, refPreservation, visualQuality, artifacts]) =>
   computeResult('r2i', { instruction, personId, refPreservation, visualQuality, artifacts })
@@ -548,4 +551,157 @@ test('every N/A combination still produces a usable skeleton', () => {
       }
     }
   }
+})
+
+/* ---------------- TI2T, the text answer task ---------------- */
+
+const ISSUE_VALUES = [0, 1, 2]
+
+function* issueCombos() {
+  for (const fa of ISSUE_VALUES) for (const fb of ISSUE_VALUES)
+    for (const ia of ISSUE_VALUES) for (const ib of ISSUE_VALUES)
+      for (const ha of ISSUE_VALUES) for (const hb of ISSUE_VALUES)
+        for (const sa of ISSUE_VALUES) for (const sb of ISSUE_VALUES)
+          yield {
+            factuality: { a: fa, b: fb },
+            instruction: { a: ia, b: ib },
+            helpfulness: { a: ha, b: hb },
+            style: { a: sa, b: sb },
+          }
+}
+
+test('TI2T needs both responses rated on every dimension', () => {
+  assert.equal(computeIssueResult({}), null)
+  assert.equal(
+    computeIssueResult({
+      factuality: { a: 0, b: 1 },
+      instruction: { a: 1, b: 1 },
+      helpfulness: { a: 0 },
+      style: { a: 1, b: 0 },
+    }),
+    null,
+    'a half rated dimension must not produce a verdict'
+  )
+})
+
+test('TI2T matches the call a rater actually made', () => {
+  // Taken from a real submitted task: A no issue / B minor on factuality,
+  // both minor on instruction following, A no issue / B minor on helpfulness,
+  // A minor / B no issue on style. The rater chose Slightly Prefer A.
+  const scores = {
+    factuality: { a: 0, b: 1 },
+    instruction: { a: 1, b: 1 },
+    helpfulness: { a: 0, b: 1 },
+    style: { a: 1, b: 0 },
+  }
+  const r = computeIssueResult(scores)
+  assert.equal(r.verdict.label, 'Slightly A')
+  assert.equal(r.net, 1)
+  assert.equal(r.winsA, 2)
+  assert.equal(r.winsB, 1)
+})
+
+test('fewer issues wins, and severity outweighs count', () => {
+  const level = (a, b) => ({ a, b })
+  // B leads on two dimensions by a minor issue each; A leads on one by a major.
+  const scores = {
+    factuality: level(2, 0),
+    instruction: level(0, 1),
+    helpfulness: level(0, 1),
+    style: level(0, 0),
+  }
+  const r = computeIssueResult(scores)
+  assert.equal(r.winsA, 2, 'A should lead on two dimensions')
+  assert.equal(r.winsB, 1, 'B should lead on one')
+  assert.equal(r.net, 0, 'the severity cancels exactly')
+  assert.equal(r.verdict.label, 'Tie', 'an exact cancel is a tie, not a win on count')
+})
+
+test('a wide issue gap reads as strongly, a narrow one as slightly', () => {
+  const strong = computeIssueResult({
+    factuality: { a: 0, b: 2 },
+    instruction: { a: 0, b: 2 },
+    helpfulness: { a: 0, b: 0 },
+    style: { a: 0, b: 0 },
+  })
+  assert.equal(strong.verdict.label, 'Strongly A')
+
+  const slight = computeIssueResult({
+    factuality: { a: 0, b: 1 },
+    instruction: { a: 0, b: 0 },
+    helpfulness: { a: 0, b: 0 },
+    style: { a: 0, b: 0 },
+  })
+  assert.equal(slight.verdict.label, 'Slightly A')
+})
+
+test('identical ratings on every dimension are a tie', () => {
+  for (const v of ISSUE_VALUES) {
+    const same = {
+      factuality: { a: v, b: v },
+      instruction: { a: v, b: v },
+      helpfulness: { a: v, b: v },
+      style: { a: v, b: v },
+    }
+    assert.equal(computeIssueResult(same).verdict.label, 'Tie')
+  }
+})
+
+test('every TI2T skeleton clears the 100 character minimum', () => {
+  // The task rejects justifications under 100 characters, so the scaffold must
+  // start well past that before the rater adds anything.
+  let worst = Infinity
+  for (const scores of issueCombos()) {
+    const text = buildIssueStarter(scores, computeIssueResult(scores), 0)
+    worst = Math.min(worst, text.length)
+    assert.match(text, /Trade-off:/, `no trade-off in: ${text}`)
+    assert.ok(!text.includes('undefined'), `bad token in: ${text}`)
+  }
+  assert.ok(worst >= 100, `shortest skeleton was only ${worst} characters`)
+})
+
+test('every TI2T skeleton names all four dimensions', () => {
+  const names = ['factuality', 'instruction following', 'helpfulness', 'style and format']
+  for (const scores of issueCombos()) {
+    const text = buildIssueStarter(scores, computeIssueResult(scores), 0).toLowerCase()
+    for (const n of names) {
+      assert.ok(text.includes(n), `skeleton never mentions ${n}`)
+    }
+  }
+})
+
+test('the TI2T skeleton opens on the side the engine picked', () => {
+  for (const scores of issueCombos()) {
+    const r = computeIssueResult(scores)
+    const opening = buildIssueStarter(scores, r, 0).split('.')[0]
+    if (r.verdict.side === 'T') {
+      assert.doesNotMatch(opening, /prefer Response [AB]/)
+      continue
+    }
+    const L = r.verdict.side === 'A' ? 'B' : 'A'
+    assert.ok(opening.includes('Response ' + r.verdict.side), `opening: ${opening}`)
+    assert.ok(!opening.includes('Response ' + L), `opening names the loser: ${opening}`)
+  }
+})
+
+test('the TI2T rephrase bank covers every slot', () => {
+  const scores = {
+    factuality: { a: 0, b: 1 },
+    instruction: { a: 1, b: 1 },
+    helpfulness: { a: 0, b: 1 },
+    style: { a: 1, b: 0 },
+  }
+  const groups = issueAlternatives(scores, computeIssueResult(scores))
+  assert.ok(groups.length >= 4)
+  for (const g of groups) {
+    assert.ok(g.options.length >= 2, `${g.slot} offers only ${g.options.length}`)
+    assert.ok(!g.options.join(' ').includes('{'), `${g.slot} left a placeholder unfilled`)
+  }
+})
+
+test('the three tasks are offered and TI2T uses the issue model', () => {
+  assert.deepEqual(Object.keys(TASKS).sort(), ['r2i', 't2i', 'ti2t'])
+  assert.equal(TASKS.ti2t.mode, 'issues')
+  assert.deepEqual(TASKS.ti2t.axes, ['factuality', 'instruction', 'helpfulness', 'style'])
+  assert.ok(!TASKS.r2i.mode, 'the image tasks keep the comparative model')
 })
