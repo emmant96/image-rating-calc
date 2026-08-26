@@ -83,6 +83,15 @@
           tagline: 'You start with a real photo and change part of it. Keeping the face and the background right is what matters.',
           axes: ['instruction', 'personId', 'refPreservation', 'visualQuality', 'artifacts'],
         },
+        i2i: {
+          id: 'i2i',
+          label: 'Image-to-Image',
+          short: 'I2I',
+          tagline: 'Someone asks for one thing in a photo to be changed. You check the change really happened, and that nothing else got touched.',
+          // I2I shares the R2I rubric: the same six dimensions, and the same
+          // rule for turning them into an overall call.
+          axes: ['instruction', 'personId', 'refPreservation', 'visualQuality', 'artifacts'],
+        },
         t2i: {
           id: 't2i',
           label: 'Text-to-Image',
@@ -100,6 +109,26 @@
           mode: 'issues',
           axes: ['factuality', 'instruction', 'helpfulness', 'style'],
         },
+      }
+
+      /**
+       * I2I asks the same questions as R2I but about an edit, so the axes are
+       * explained differently even though the scoring is identical.
+       */
+      const TASK_BLURBS = {
+        i2i: {
+          instruction: 'Did the change they asked for actually happen? If they said "make the sky blue", is the sky blue now? Careful: a change that is too small to notice is just as wrong as no change at all.',
+          personId: 'If there are people, do they still look like the same people? Only the face and body shape count. New clothes or a new pose is fine. If there are no people at all, choose N/A.',
+          refPreservation: 'Everything they did NOT ask to change should look exactly the same as before. Check the background, the other objects, and the colours in the parts that were left alone.',
+          visualQuality: 'Does the whole picture still look good? Not blurry, not too bright, not washed out. You are looking at the whole picture, not one small spot.',
+          artifacts: 'Look for small broken bits the edit left behind. Count the fingers. Look for smudgy joins where the new part meets the old part, messy letters, or extra things nobody asked for.',
+        },
+      }
+
+      /** The wording for an axis, using the task's own version when it has one. */
+      const axisFor = (taskId, key) => {
+        const override = TASK_BLURBS[taskId] && TASK_BLURBS[taskId][key]
+        return override ? Object.assign({}, AXES[key], { blurb: override }) : AXES[key]
       }
 
       /** Dimensions for the issue style task. */
@@ -222,8 +251,9 @@
         const total = scored.length
 
         const strong =
-          taskId === 'r2i'
-            ? // R2I: magnitude comes from the combined net point total of 3 or beyond.
+          taskId === 'r2i' || taskId === 'i2i'
+            ? // R2I and I2I share a rubric: magnitude comes from the combined
+              // net point total reaching 3 or beyond.
               aWins
               ? net >= 3
               : net <= -3
@@ -308,6 +338,18 @@
           'On {axis} the two are level, since both [name the shared detail], and this does not decide anything',
           'Neither response gains on {axis}: [name the shared detail] appears in both',
         ],
+        // On an edit task the instruction axis is really two questions: did the
+        // change happen at all, and was it done fully. Under-editing fails just
+        // as hard as ignoring the instruction, so the brackets ask for both.
+        winsEdit: [
+          'On {axis}, {W} actually makes the requested change: [say what the edit was and what {W} did], while {L} [say whether it missed the edit or barely did it]',
+          '{W} carries out the edit properly, [describe the change in {W}], whereas {L} [say what is missing or under-done]',
+          'Looking at {axis}, the edit lands in {W}: [name the change], while in {L} [describe how far short it falls]',
+        ],
+        evenEdit: [
+          'Both responses make the requested change: [say what the edit was and how each handled it], so {axis} does not separate them',
+          'The edit happens in both, [describe what each did], so neither gains on {axis}',
+        ],
         notApplicable: [
           '{Axis} does not apply here: [say why, for example no person appears in the reference]',
           '{Axis} is out of scope for this pair, since [say what the reference actually shows]',
@@ -344,7 +386,7 @@
        * Build the justification skeleton for a scored task.
        * Returns null while any axis is unscored.
        */
-      function buildStarter(scores, result, seed) {
+      function buildStarter(scores, result, seed, taskId) {
         if (!result) return null
         const s = seed || 0
         const W = result.verdict.side
@@ -376,8 +418,9 @@
               }) + '.'
             )
           } else if (v === 0) {
+            const editAxis = taskId === 'i2i' && k === 'instruction'
             lines.push(
-              fillPhrase(pickPhrase(PHRASES.even, s, i + 1), {
+              fillPhrase(pickPhrase(editAxis ? PHRASES.evenEdit : PHRASES.even, s, i + 1), {
                 axis,
                 Axis: capitalise(axis),
               }) + '.'
@@ -385,8 +428,9 @@
           } else {
             const winner = v > 0 ? 'A' : 'B'
             const loser = v > 0 ? 'B' : 'A'
+            const editAxis = taskId === 'i2i' && k === 'instruction'
             lines.push(
-              fillPhrase(pickPhrase(PHRASES.wins, s, i + 1), {
+              fillPhrase(pickPhrase(editAxis ? PHRASES.winsEdit : PHRASES.wins, s, i + 1), {
                 axis,
                 Axis: capitalise(axis),
                 W: winner,
@@ -424,7 +468,7 @@
       }
 
       /** Every wording available for a slot, so the rater can swap any sentence. */
-      function starterAlternatives(scores, result) {
+      function starterAlternatives(scores, result, taskId) {
         if (!result) return []
         const W = result.verdict.side
         const L = W === 'A' ? 'B' : 'A'
@@ -444,6 +488,15 @@
             fillPhrase(t, { axis: 'visual quality', Axis: 'Visual quality', W, L })
           ),
         })
+
+        if (taskId === 'i2i') {
+          out.push({
+            slot: 'Saying whether the edit happened',
+            options: PHRASES.winsEdit.map((t) =>
+              fillPhrase(t, { axis: 'instruction following', Axis: 'Instruction following', W, L })
+            ),
+          })
+        }
 
         out.push({
           slot: 'An axis that is even',
@@ -1126,11 +1179,11 @@
         // with the same sentence. Reshuffle bumps it on demand.
         const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
         const starter = useMemo(
-          () => (issueMode ? buildIssueStarter(scores, result, seed) : buildStarter(scores, result, seed)),
+          () => (issueMode ? buildIssueStarter(scores, result, seed) : buildStarter(scores, result, seed, taskId)),
           [issueMode, scores, result, seed]
         )
         const alternatives = useMemo(
-          () => (issueMode ? issueAlternatives(scores, result) : starterAlternatives(scores, result)),
+          () => (issueMode ? issueAlternatives(scores, result) : starterAlternatives(scores, result, taskId)),
           [issueMode, scores, result]
         )
 
@@ -1229,7 +1282,13 @@
                       issueMode ? (
                         <IssueRow key={key} index={i} axis={ISSUE_AXES[key]} value={scores[key]} onChange={setIssue} />
                       ) : (
-                        <AxisRow key={key} index={i} axis={AXES[key]} value={scores[key]} onChange={setScore} />
+                        <AxisRow
+                          key={key}
+                          index={i}
+                          axis={axisFor(task.id, key)}
+                          value={scores[key]}
+                          onChange={setScore}
+                        />
                       )
                     )}
                   </div>

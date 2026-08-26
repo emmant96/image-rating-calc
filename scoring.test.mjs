@@ -18,12 +18,12 @@ function loadEngine() {
   const end = html.lastIndexOf('/*', endMarker)
   const source = html.slice(start, end)
   return new Function(
-    source + '\n return { computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA, computeIssueResult, buildIssueStarter, issueAlternatives }'
+    source + '\n return { computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA, axisFor, computeIssueResult, buildIssueStarter, issueAlternatives }'
   )()
 }
 
 const {
-  computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA,
+  computeResult, TASKS, buildStarter, starterAlternatives, optionsFor, NA, axisFor,
   computeIssueResult, buildIssueStarter, issueAlternatives,
 } = loadEngine()
 
@@ -699,9 +699,75 @@ test('the TI2T rephrase bank covers every slot', () => {
   }
 })
 
-test('the three tasks are offered and TI2T uses the issue model', () => {
-  assert.deepEqual(Object.keys(TASKS).sort(), ['r2i', 't2i', 'ti2t'])
+test('the four tasks are offered and TI2T uses the issue model', () => {
+  assert.deepEqual(Object.keys(TASKS).sort(), ['i2i', 'r2i', 't2i', 'ti2t'])
   assert.equal(TASKS.ti2t.mode, 'issues')
   assert.deepEqual(TASKS.ti2t.axes, ['factuality', 'instruction', 'helpfulness', 'style'])
   assert.ok(!TASKS.r2i.mode, 'the image tasks keep the comparative model')
+})
+
+/* ---------------- image to image ---------------- */
+
+test('I2I offers the same five dimensions as R2I', () => {
+  assert.deepEqual(TASKS.i2i.axes, TASKS.r2i.axes, 'I2I shares the R2I rubric')
+})
+
+test('I2I and R2I reach the same verdict on the same scores', () => {
+  // They share a rubric, so a divergence here would mean one of them is wrong.
+  for (const scores of allCombos('r2i')) {
+    assert.equal(
+      computeResult('i2i', scores).verdict.label,
+      computeResult('r2i', scores).verdict.label,
+      `I2I and R2I disagree on ${JSON.stringify(scores)}`
+    )
+  }
+})
+
+test('Person ID can be marked N/A on I2I, for photos with nobody in them', () => {
+  const scores = { instruction: 2, personId: NA, refPreservation: 0, visualQuality: 1, artifacts: 0 }
+  const r = computeResult('i2i', scores)
+  assert.equal(typeof r.net, 'number')
+  assert.equal(r.net, 3)
+  assert.equal(r.verdict.label, 'Strongly A')
+})
+
+test('I2I explains every axis in its own words', () => {
+  for (const key of TASKS.i2i.axes) {
+    const i2i = axisFor('i2i', key)
+    const r2i = axisFor('r2i', key)
+    assert.notEqual(i2i.blurb, r2i.blurb, `${key} still uses the R2I wording on I2I`)
+    assert.equal(i2i.title, r2i.title, `${key} should keep the same title`)
+  }
+})
+
+test('the I2I instruction blurb warns about under-editing', () => {
+  // Under-editing failing as hard as ignoring the instruction is the point
+  // taskers most often miss, so it has to be in the wording they read.
+  assert.match(axisFor('i2i', 'instruction').blurb, /too small to notice|under/i)
+})
+
+test('the I2I skeleton asks whether the edit actually happened', () => {
+  const scores = { instruction: 1, personId: 0, refPreservation: 0, visualQuality: -1, artifacts: 0 }
+  const i2i = buildStarter(scores, computeResult('i2i', scores), 0, 'i2i')
+  const r2i = buildStarter(scores, computeResult('r2i', scores), 0, 'r2i')
+
+  assert.match(i2i, /edit/i, 'the I2I skeleton should mention the edit')
+  assert.notEqual(i2i, r2i, 'I2I and R2I skeletons should not read identically')
+})
+
+test('every I2I combination produces a usable skeleton', () => {
+  for (const scores of allCombos('r2i')) {
+    const text = buildStarter(scores, computeResult('i2i', scores), 0, 'i2i')
+    assert.ok(text.trim().split(/\s+/).length >= 40, `too short: ${text}`)
+    assert.match(text, /Trade-off:/)
+    assert.ok(!text.includes('undefined') && !text.includes('{'), `unfilled slot in: ${text}`)
+  }
+})
+
+test('the I2I rephrase bank gains an edit group', () => {
+  const scores = { instruction: 1, personId: 0, refPreservation: 0, visualQuality: -1, artifacts: 0 }
+  const slots = (task) =>
+    starterAlternatives(scores, computeResult(task, scores), task).map((g) => g.slot)
+  assert.ok(slots('i2i').some((s) => /edit/i.test(s)), 'expected an edit slot on I2I')
+  assert.ok(!slots('r2i').some((s) => /edit/i.test(s)), 'the edit slot should not appear on R2I')
 })
