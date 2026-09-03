@@ -840,11 +840,35 @@ test('every image a practice case references actually exists', () => {
 })
 
 test('cases declare where their answer came from', () => {
+  // Three levels of provenance, because they are genuinely different:
+  // a published verdict with reasoning, a published winner whose strength we
+  // reconstructed, and a case with no published answer at all.
   for (const c of practice.CASES) {
-    assert.ok(['official', 'ours'].includes(c.source), `${c.id} must say if its key is official`)
+    assert.ok(
+      ['official', 'official-winner', 'ours'].includes(c.source),
+      `${c.id} must declare its provenance, got ${c.source}`
+    )
+    assert.ok(c.kind, `${c.id} must say which task type it is`)
   }
   assert.ok(
-    practice.CASES.some((c) => c.source === 'official'),
-    'at least one case should carry a real answer key'
+    practice.CASES.filter((c) => c.source === 'official').length >= 2,
+    'most cases should carry a real answer key'
+  )
+})
+
+test('cases cover both a scored Person ID and a not applicable one', () => {
+  // The two situations need different handling, so both must be practised.
+  const withPerson = practice.CASES.filter((c) => typeof c.answer.personId === 'number')
+  const withoutPerson = practice.CASES.filter((c) => c.answer.personId === practice.NA)
+  assert.ok(withPerson.length >= 2, 'need cases where identity is actually judged')
+  assert.ok(withoutPerson.length >= 2, 'need cases where Person ID is N/A')
+})
+
+test('cases cover a range of verdicts, not just one', () => {
+  const verdicts = new Set(practice.CASES.map((c) => c.verdict))
+  assert.ok(verdicts.size >= 3, `only ${verdicts.size} distinct verdicts across the set`)
+  assert.ok(
+    [...verdicts].some((v) => v.startsWith('Strongly')),
+    'at least one case should be a Strongly, since under-calling is the common error'
   )
 })
