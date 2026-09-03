@@ -771,3 +771,80 @@ test('the I2I rephrase bank gains an edit group', () => {
   assert.ok(slots('i2i').some((s) => /edit/i.test(s)), 'expected an edit slot on I2I')
   assert.ok(!slots('r2i').some((s) => /edit/i.test(s)), 'the edit slot should not appear on R2I')
 })
+
+/* ---------------- practice tasks ---------------- */
+
+function loadPractice() {
+  const html = fs.readFileSync(new URL('./practice.html', import.meta.url), 'utf8')
+  const grab = (a, b) => {
+    const s = html.indexOf(a)
+    const e = html.indexOf(b)
+    assert.ok(s !== -1 && e !== -1, `markers ${a} not found`)
+    return html.slice(html.indexOf('*/', s) + 2, html.lastIndexOf('/*', e))
+  }
+  const src = grab('---8<--- CASES START', '---8<--- CASES END') +
+    grab('---8<--- ENGINE START', '---8<--- ENGINE END')
+  return new Function(src + '\n return { CASES, AXES, computeResult, NA, optionsFor }')()
+}
+
+const practice = loadPractice()
+
+test('practice cases are complete and scoreable', () => {
+  assert.ok(practice.CASES.length >= 2, 'expected at least two practice cases')
+  for (const c of practice.CASES) {
+    assert.ok(c.instruction && c.instruction.length > 20, `${c.id} needs an instruction`)
+    assert.ok(c.references.length >= 1, `${c.id} needs a reference`)
+    assert.ok(c.a && c.b, `${c.id} needs both responses`)
+    assert.ok(c.watchFor.length >= 2, `${c.id} needs hints`)
+    assert.ok(c.why.length >= 2, `${c.id} needs reasoning`)
+    for (const axis of practice.AXES) {
+      assert.ok(axis.key in c.answer, `${c.id} has no answer for ${axis.key}`)
+    }
+  }
+})
+
+test('each stated verdict matches what the rule computes', () => {
+  // A case whose written verdict disagreed with its own scores would teach the
+  // rule wrong, which is worse than having no practice case at all.
+  for (const c of practice.CASES) {
+    const r = practice.computeResult(c.answer)
+    assert.equal(r.label, c.verdict, `${c.id}: scores give ${r.label} but the case claims ${c.verdict}`)
+  }
+})
+
+test('the practice engine agrees with the calculator on every R2I combination', () => {
+  for (const scores of allCombos('r2i')) {
+    assert.equal(
+      practice.computeResult(scores).label,
+      computeResult('r2i', scores).verdict.label,
+      `practice and calculator disagree on ${JSON.stringify(scores)}`
+    )
+  }
+})
+
+test('practice handles N/A the same way the calculator does', () => {
+  const scores = { instruction: -1, personId: practice.NA, refPreservation: -1, visualQuality: 0, artifacts: 0 }
+  const p = practice.computeResult(scores)
+  assert.equal(typeof p.net, 'number')
+  assert.equal(p.label, computeResult('r2i', { ...scores, personId: NA }).verdict.label)
+})
+
+test('every image a practice case references actually exists', () => {
+  // A missing file shows a placeholder, which would quietly gut the exercise.
+  const dir = new URL('./assets/web/', import.meta.url)
+  for (const c of practice.CASES) {
+    for (const f of [c.a, c.b, ...c.references.map((r) => r.file)]) {
+      assert.ok(fs.existsSync(new URL(f, dir)), `${c.id} refers to a missing image: ${f}`)
+    }
+  }
+})
+
+test('cases declare where their answer came from', () => {
+  for (const c of practice.CASES) {
+    assert.ok(['official', 'ours'].includes(c.source), `${c.id} must say if its key is official`)
+  }
+  assert.ok(
+    practice.CASES.some((c) => c.source === 'official'),
+    'at least one case should carry a real answer key'
+  )
+})

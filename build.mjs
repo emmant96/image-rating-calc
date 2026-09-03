@@ -24,7 +24,7 @@ const read = (...p) => readFileSync(join(...p), 'utf8')
 
 // Every page that gets compiled and shipped. Tailwind scans all of them so one
 // stylesheet covers the whole site.
-const PAGES = ['index.html', 'training.html', 'results.html']
+const PAGES = ['index.html', 'training.html', 'results.html', 'practice.html']
 
 /** Pull the app source out of the single <script type="text/babel"> block. */
 function extractAppSource(html) {

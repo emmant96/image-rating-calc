@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>R2I Practice Tasks</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+      // Babel's stock react preset defaults to the automatic JSX runtime, which
+      // emits an import statement that cannot run in a plain script. Pin classic.
+      Babel.registerPreset('react-classic', {
+        presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]],
+      })
+    </script>
+    <style>
+      #root:empty::after {
+        content: 'Loading...';
+        display: block;
+        padding: 3rem;
+        text-align: center;
+        color: #737373;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="bg-neutral-100">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react-classic">
+      const { useMemo, useState } = React
+
+      /* ================================================================
+       * PRACTICE CASES
+       * ---8<--- CASES START
+       *
+       * Real pairs to rate before seeing the answer. Each case says where its
+       * answer comes from: the training material, or our own reading. Only the
+       * first kind is an official key, and the page says so on screen, because
+       * presenting a guess as the answer would teach the wrong lesson.
+       * ================================================================ */
+
+      const AXES = [
+        { key: 'instruction', title: 'Instruction Following' },
+        { key: 'personId', title: 'Person ID' },
+        { key: 'refPreservation', title: 'Reference Preservation' },
+        { key: 'visualQuality', title: 'Visual Quality' },
+        { key: 'artifacts', title: 'AI Artifacts' },
+      ]
+
+      const OPTIONS = [
+        { value: 2, label: 'Strongly A' },
+        { value: 1, label: 'Slightly A' },
+        { value: 0, label: 'Tie' },
+        { value: -1, label: 'Slightly B' },
+        { value: -2, label: 'Strongly B' },
+      ]
+      const NA = 'na'
+      const NA_OPTION = { value: NA, label: 'N/A' }
+      const optionsFor = (key) => (key === 'personId' ? OPTIONS.concat([NA_OPTION]) : OPTIONS)
+
+      const CASES = [
+        {
+          id: 'age',
+          title: 'Age transformation',
+          source: 'official',
+          instruction:
+            'Make the suit darker and lighting as warm tungsten light. Time has rewound for this distinguished gentleman; the silver has faded back to the rich chestnut brown of his younger days. Change his hair to a dark, full-bodied chestnut brown, but keep his distinguished comb-back style exactly the same.',
+          references: [{ file: 'practice-age-ref.jpg', caption: 'Reference: elderly man, grey comb-back hair, glasses' }],
+          a: 'practice-age-a.jpg',
+          b: 'practice-age-b.jpg',
+          watchFor: [
+            'Zoom right into the hair. The reference has loose wisps and the comb-back is slightly messy on the left.',
+            'The prompt names a lighting cue: warm tungsten. Warm means orange, not blue.',
+            'Both make him younger, so age drift alone does not separate them.',
+          ],
+          answer: {
+            instruction: 1,
+            personId: 1,
+            refPreservation: 0,
+            visualQuality: 0,
+            artifacts: 0,
+          },
+          verdict: 'Slightly A',
+          why: [
+            'Instruction Following favours A. Both images make the gentleman younger, but the prompt asked for warm tungsten light, and A resolves that better. B is cooler.',
+            'Person ID favours A too. Zoom in on the hair in the reference: there are wisps and the comb-back is slightly messy on the left. A keeps that. B drifts further from the reference hairstyle.',
+            'Age drift appears in both, so it does not separate them, which is why the call comes down to the lighting cue and the signature feature.',
+          ],
+        },
+
+        {
+          id: 'chair',
+          title: 'Swap the desk chair',
+          source: 'ours',
+          instruction: 'replace the desk chair with the gray and white gaming chair from photo 2',
+          references: [
+            { file: 'practice-chair-ref1.jpg', caption: 'Reference 1: the room to edit' },
+            { file: 'practice-chair-ref2.jpg', caption: 'Reference 2: the chair to put in it' },
+          ],
+          a: 'practice-chair-a.jpg',
+          b: 'practice-chair-b.jpg',
+          watchFor: [
+            'The instruction names two colours: gray AND white. Check both are actually there.',
+            'Compare the framing against Reference 1. Did either response quietly zoom or crop?',
+            'Everything except the chair should be untouched: chandelier, plant, flowers, rug, desk.',
+          ],
+          answer: {
+            instruction: -1,
+            personId: NA,
+            refPreservation: -1,
+            visualQuality: 0,
+            artifacts: 0,
+          },
+          verdict: 'Slightly B',
+          why: [
+            'Instruction Following favours B. The instruction asks for the gray and white chair. B reproduces the two tone shell, grey wings with white centre panels, as in Reference 2. A renders a chair that is almost entirely white, so it delivers half of what was asked for.',
+            'Reference Preservation favours B. A is noticeably zoomed in against Reference 1: less of the panelled wall and less rug are visible. Nobody asked for a framing change, and an unrequested crop counts against this axis.',
+            'Person ID is N/A. There is nobody in these images, so there is no identity to preserve. This is exactly the case the N/A option exists for.',
+            'Visual quality and artifacts look level. Both are clean and similarly lit, so neither gains here.',
+          ],
+        },
+      ]
+
+      /* ---8<--- CASES END */
+
+      /* ---8<--- ENGINE START
+       * The same rule the calculator uses, so practice and the real tool never
+       * disagree. Kept in step by a test that compares the two copies.
+       */
+      const isScored = (v) => typeof v === 'number'
+
+      function computeResult(scores) {
+        const values = AXES.map((a) => scores[a.key])
+        if (values.some((v) => v === undefined || v === null)) return null
+        const scored = values.filter(isScored)
+        const winsA = scored.filter((v) => v > 0).length
+        const winsB = scored.filter((v) => v < 0).length
+        const net = scored.reduce((s, v) => s + v, 0)
+
+        if (winsA === winsB) {
+          const i = scores.instruction
+          if (i > 0) return { label: 'Slightly A', side: 'A', winsA, winsB, net }
+          if (i < 0) return { label: 'Slightly B', side: 'B', winsA, winsB, net }
+          return { label: 'Tie', side: 'T', winsA, winsB, net }
+        }
+        const aWins = winsA > winsB
+        const strong = aWins ? net >= 3 : net <= -3
+        return {
+          label: (strong ? 'Strongly ' : 'Slightly ') + (aWins ? 'A' : 'B'),
+          side: aWins ? 'A' : 'B',
+          winsA,
+          winsB,
+          net,
+        }
+      }
+      /* ---8<--- ENGINE END */
+
+      const cx = (...c) => c.filter(Boolean).join(' ')
+      const labelOf = (v) =>
+        v === undefined ? 'not scored' : (optionsFor('personId').find((o) => o.value === v) || {}).label
+
+      function Figure({ file, caption, onZoom }) {
+        const [failed, setFailed] = useState(false)
+        if (failed)
+          return (
+            <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-6 text-center text-xs text-neutral-500">
+              missing: assets/web/{file}
+            </div>
+          )
+        return (
+          <figure>
+            <button
+              onClick={() => onZoom && onZoom(file)}
+              className="block w-full cursor-zoom-in rounded-xl bg-neutral-300 p-2"
+            >
+              <img
+                src={'./assets/web/' + file}
+                alt={caption || ''}
+                onError={() => setFailed(true)}
+                className="mx-auto block w-full rounded-lg"
+              />
+            </button>
+            {caption && <figcaption className="mt-1.5 text-xs text-neutral-500">{caption}</figcaption>}
+          </figure>
+        )
+      }
+
+      function AxisRow({ axis, value, onChange, answer, revealed }) {
+        const opts = optionsFor(axis.key)
+        const agrees = revealed && value === answer
+        return (
+          <div
+            className={cx(
+              'rounded-xl border p-4',
+              revealed ? (agrees ? 'border-emerald-400 bg-emerald-50' : 'border-amber-400 bg-amber-50') : 'border-neutral-300 bg-white'
+            )}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold text-neutral-900">{axis.title}</span>
+              {revealed && (
+                <span className={cx('text-xs font-semibold', agrees ? 'text-emerald-700' : 'text-amber-700')}>
+                  {agrees ? 'matches' : 'answer: ' + labelOf(answer)}
+                </span>
+              )}
+            </div>
+            <div className={cx('mt-3 grid grid-cols-2 gap-2', opts.length > 5 ? 'sm:grid-cols-6' : 'sm:grid-cols-5')}>
+              {opts.map((o) => (
+                <button
+                  key={String(o.value)}
+                  onClick={() => onChange(axis.key, value === o.value ? undefined : o.value)}
+                  className={cx(
+                    'rounded-lg px-2 py-2 text-xs font-semibold transition',
+                    value === o.value
+                      ? o.value === NA
+                        ? 'bg-neutral-600 text-white'
+                        : 'bg-indigo-500 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      }
+
+      function Case({ item, index, total, onNext, onPrev }) {
+        const [scores, setScores] = useState({})
+        const [revealed, setRevealed] = useState(false)
+        const [zoom, setZoom] = useState(null)
+
+        const set = (k, v) =>
+          setScores((p) => {
+            const n = { ...p }
+            if (v === undefined) delete n[k]
+            else n[k] = v
+            return n
+          })
+
+        const mine = useMemo(() => computeResult(scores), [scores])
+        const theirs = useMemo(() => computeResult(item.answer), [item])
+        const done = AXES.every((a) => scores[a.key] !== undefined)
+        const sameCall = revealed && mine && theirs && mine.label === theirs.label
+
+        return (
+          <div className="mx-auto max-w-5xl">
+            {zoom && (
+              <div
+                onClick={() => setZoom(null)}
+                className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/80 p-4"
+              >
+                <img src={'./assets/web/' + zoom} alt="" className="max-h-full max-w-full rounded-lg" />
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                Practice {index + 1} of {total}
+              </span>
+              <span
+                className={cx(
+                  'rounded-lg px-2.5 py-1 text-xs font-semibold',
+                  item.source === 'official'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                )}
+              >
+                {item.source === 'official'
+                  ? 'Answer from the training material'
+                  : 'Answer is our reading, not an official key'}
+              </span>
+            </div>
+
+            <h1 className="mt-3 text-2xl font-bold text-neutral-900">{item.title}</h1>
+
+            <div className="mt-4 rounded-xl border border-neutral-300 bg-white p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-neutral-500">Instruction</div>
+              <p className="mt-1.5 text-[15px] leading-relaxed text-neutral-900">{item.instruction}</p>
+            </div>
+
+            <div className="mt-5">
+              <div className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+                Reference{item.references.length > 1 ? 's' : ''} ({item.references.length})
+              </div>
+              <div className={cx('mt-2 grid gap-4', item.references.length > 1 ? 'sm:grid-cols-2' : '')}>
+                {item.references.map((r) => (
+                  <Figure key={r.file} file={r.file} caption={r.caption} onZoom={setZoom} />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="mb-2 text-sm font-bold text-neutral-900">Response A</div>
+                <Figure file={item.a} onZoom={setZoom} />
+              </div>
+              <div>
+                <div className="mb-2 text-sm font-bold text-neutral-900">Response B</div>
+                <Figure file={item.b} onZoom={setZoom} />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-neutral-500">Click any image to enlarge it.</p>
+
+            <div className="mt-6 rounded-xl border-l-4 border-indigo-500 bg-indigo-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-indigo-800">Before you score</div>
+              <ul className="mt-2 space-y-1.5">
+                {item.watchFor.map((w, i) => (
+                  <li key={i} className="text-sm leading-relaxed text-neutral-800">
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <h2 className="mt-8 text-lg font-semibold text-neutral-900">Score it yourself</h2>
+            <div className="mt-3 space-y-3">
+              {AXES.map((a) => (
+                <AxisRow
+                  key={a.key}
+                  axis={a}
+                  value={scores[a.key]}
+                  onChange={set}
+                  answer={item.answer[a.key]}
+                  revealed={revealed}
+                />
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-xl border border-neutral-300 bg-white p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-neutral-500">Your overall call</div>
+              <div className="mt-1 text-xl font-bold text-neutral-900">
+                {mine ? mine.label : 'Score all five to see it'}
+              </div>
+              {mine && (
+                <div className="mt-1 text-xs text-neutral-500">
+                  A wins {mine.winsA}, B wins {mine.winsB}, net {mine.net > 0 ? '+' + mine.net : mine.net}
+                </div>
+              )}
+            </div>
+
+            {!revealed ? (
+              <button
+                onClick={() => setRevealed(true)}
+                disabled={!done}
+                className={cx(
+                  'mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold transition',
+                  done ? 'bg-indigo-500 text-white hover:bg-indigo-400' : 'cursor-not-allowed bg-neutral-200 text-neutral-400'
+                )}
+              >
+                {done ? 'Compare with the answer' : 'Score all five dimensions first'}
+              </button>
+            ) : (
+              <div className="mt-5">
+                <div
+                  className={cx(
+                    'rounded-xl border p-5',
+                    sameCall ? 'border-emerald-400 bg-emerald-50' : 'border-amber-400 bg-amber-50'
+                  )}
+                >
+                  <div className="text-xs font-bold uppercase tracking-wider text-neutral-600">
+                    {sameCall ? 'Same overall call' : 'Different overall call'}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-baseline gap-4">
+                    <span className="text-sm text-neutral-600">
+                      You said <strong className="text-neutral-900">{mine.label}</strong>
+                    </span>
+                    <span className="text-sm text-neutral-600">
+                      Answer <strong className="text-neutral-900">{item.verdict}</strong>
+                    </span>
+                  </div>
+                  <ul className="mt-4 space-y-2.5">
+                    {item.why.map((w, i) => (
+                      <li key={i} className="text-sm leading-relaxed text-neutral-800">
+                        {w}
+                      </li>
+                    ))}
+                  </ul>
+                  {item.source !== 'official' && (
+                    <p className="mt-4 border-t border-amber-300 pt-3 text-xs leading-relaxed text-amber-800">
+                      This case has no published answer key. The reasoning above is ours, so treat a
+                      disagreement as worth discussing rather than as a mistake on your part.
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => {
+                    setScores({})
+                    setRevealed(false)
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                  className="mt-3 w-full rounded-xl border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-600 transition hover:border-neutral-500 hover:text-neutral-900"
+                >
+                  Try this one again
+                </button>
+              </div>
+            )}
+
+            <div className="mt-8 flex items-center justify-between gap-3 border-t border-neutral-300 pt-5">
+              <button
+                onClick={onPrev}
+                disabled={index === 0}
+                className={cx(
+                  'rounded-xl border px-5 py-2.5 text-sm font-medium transition',
+                  index === 0
+                    ? 'cursor-not-allowed border-neutral-200 text-neutral-300'
+                    : 'border-neutral-400 text-neutral-700 hover:border-neutral-600 hover:text-neutral-900'
+                )}
+              >
+                Previous
+              </button>
+              <button
+                onClick={onNext}
+                disabled={index === total - 1}
+                className={cx(
+                  'rounded-xl px-6 py-2.5 text-sm font-semibold transition',
+                  index === total - 1
+                    ? 'cursor-not-allowed bg-neutral-200 text-neutral-400'
+                    : 'bg-indigo-500 text-white hover:bg-indigo-400'
+                )}
+              >
+                Next task
+              </button>
+            </div>
+          </div>
+        )
+      }
+
+      function App() {
+        const [i, setI] = useState(0)
+        return (
+          <div className="min-h-screen bg-neutral-100 text-neutral-800 antialiased">
+            <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+              <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900">R2I practice tasks</div>
+                  <div className="text-xs text-neutral-500">
+                    Rate it yourself, then see the answer. Nothing is recorded.
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <a href="./training.html" className="rounded-xl border border-neutral-400 px-4 py-2 text-sm text-neutral-700 transition hover:border-neutral-600 hover:text-neutral-900">Training</a>
+                  <a href="./index.html" className="rounded-xl border border-neutral-400 px-4 py-2 text-sm text-neutral-700 transition hover:border-neutral-600 hover:text-neutral-900">Calculator</a>
+                </div>
+              </header>
+              <Case
+                key={CASES[i].id}
+                item={CASES[i]}
+                index={i}
+                total={CASES.length}
+                onNext={() => {
+                  setI((n) => Math.min(CASES.length - 1, n + 1))
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                onPrev={() => {
+                  setI((n) => Math.max(0, n - 1))
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+              />
+            </div>
+          </div>
+        )
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+    </script>
+  </body>
+</html>
