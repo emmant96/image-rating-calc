@@ -845,13 +845,13 @@ test('cases declare where their answer came from', () => {
   // reconstructed, and a case with no published answer at all.
   for (const c of practice.CASES) {
     assert.ok(
-      ['official', 'official-winner', 'ours'].includes(c.source),
+      ['official', 'official-winner', 'official-axes', 'ours'].includes(c.source),
       `${c.id} must declare its provenance, got ${c.source}`
     )
     assert.ok(c.kind, `${c.id} must say which task type it is`)
   }
   assert.ok(
-    practice.CASES.filter((c) => c.source === 'official').length >= 2,
+    practice.CASES.filter((c) => c.source.startsWith('official')).length >= 3,
     'most cases should carry a real answer key'
   )
 })

@@ -67,7 +67,7 @@
           id: 'age',
           title: 'Age transformation',
           kind: 'R2I',
-          source: 'official',
+          source: 'official-axes',
           instruction:
             'Make the suit darker and lighting as warm tungsten light. Time has rewound for this distinguished gentleman; the silver has faded back to the rich chestnut brown of his younger days. Change his hair to a dark, full-bodied chestnut brown, but keep his distinguished comb-back style exactly the same.',
           references: [{ file: 'practice-age-ref.jpg', caption: 'Reference: elderly man, grey comb-back hair, glasses' }],
@@ -352,7 +352,9 @@
                     ? 'Answer from the training material'
                     : item.source === 'official-winner'
                       ? 'Winner from the training material'
-                      : 'Answer is our reading, not an official key'}
+                      : item.source === 'official-axes'
+                        ? 'Two dimensions from the training material'
+                        : 'Answer is our reading, not an official key'}
                 </span>
               </div>
             </div>
@@ -472,10 +474,12 @@
                   </ul>
                   <p className="mt-4 border-t border-neutral-300 pt-3 text-xs leading-relaxed text-neutral-600">
                     {item.source === 'official'
-                      ? 'The winner and the reasoning come from the training material. The individual dimension scores are our reconstruction of how that verdict is reached, because the material names the winner rather than publishing a score for every dimension.'
+                      ? 'The overall verdict and the reasoning come from the training material. The individual dimension scores are our reconstruction of how that verdict is reached, because the material explains the call rather than publishing a score for every dimension.'
                       : item.source === 'official-winner'
                         ? 'The winner and the faults listed come from the training material. The strength of the call and the individual dimension scores are our reconstruction.'
-                        : 'This case has no published answer key at all. The reasoning above is ours, so treat a disagreement as worth discussing rather than as a mistake on your part.'}
+                        : item.source === 'official-axes'
+                          ? 'The training material states that A wins these two dimensions, and why. It does not state an overall verdict, so the overall here is what the counting rule produces from those two wins.'
+                          : 'This case has no published answer key at all. The reasoning above is ours, so treat a disagreement as worth discussing rather than as a mistake on your part.'}
                   </p>
                 </div>
 
