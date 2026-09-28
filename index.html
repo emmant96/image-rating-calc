@@ -1229,6 +1229,12 @@
                 </div>
                 <div className="flex items-center gap-2">
                 <a
+                  href="./video.html"
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                >
+                  Video
+                </a>
+                <a
                   href="./practice.html"
                   className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
                 >
@@ -1264,6 +1270,19 @@
                       <TaskCard key={id} task={TASKS[id]} onSelect={setTaskId} />
                     ))}
                   </div>
+                  <a
+                    href="./video.html"
+                    className="mt-5 flex items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 transition hover:border-indigo-400/60 hover:bg-slate-900"
+                  >
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-100">Rating videos instead?</h3>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-400">
+                        I2V, R2V and T2V live on their own page, because video scores the overall as a gut call
+                        rather than working it out from the rows.
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-indigo-300">&rarr;</span>
+                  </a>
                 </main>
               ) : (
                 <main className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">

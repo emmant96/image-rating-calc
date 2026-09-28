@@ -1,0 +1,1428 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Hedgehog Video Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+      // Same pin as the image calculator: the stock "react" preset defaults to the
+      // automatic JSX runtime, which emits an import statement that cannot run in a
+      // plain script. Classic runtime compiles to React.createElement instead.
+      Babel.registerPreset('react-classic', {
+        presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]],
+      })
+    </script>
+    <style>
+      #root:empty::after {
+        content: 'Loading...';
+        display: block;
+        padding: 3rem;
+        text-align: center;
+        color: #64748b;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-950">
+    <div id="root"></div>
+
+    <script type="text/babel" data-presets="react-classic">
+      const { useCallback, useEffect, useMemo, useRef, useState } = React
+
+      /* ================================================================
+       * VIDEO REVIEW ENGINE
+       *
+       * This is deliberately NOT the image calculator's engine.
+       *
+       * On the image tasks the overall preference is derived from the axes:
+       * you score the rows and the tool tells you who won. On the video tasks
+       * the rubric says the opposite. Overall Preference is scored first, as a
+       * gut call, and is explicitly not an average or a count of the rows. An
+       * annotator who tallies rows to reach the overall is marked wrong.
+       *
+       * So this engine never computes a verdict. You make the call; it shows
+       * you how the rows actually landed and flags the patterns that reviewers
+       * keep catching. Every flag below traces to a stated rule or a reviewed
+       * example, and the ones that are our own judgement say so.
+       * ---8<--- VIDEO START
+       * ================================================================ */
+
+      const V_AXES = {
+        overall: {
+          key: 'overall',
+          title: 'Overall Preference',
+          decisive: true,
+          blurb:
+            'Which video is just better? Answer this one first, before you look at anything below it. Imagine your mum and dad walked past both clips. Which one would they say is the better video? That gut feeling is the answer. Do not add up the rows to get here.',
+          slight: 'You would pick it, but you had to think about it.',
+          strong: 'You would pick it straight away. The other one misses the point of the prompt, or it just feels broken.',
+        },
+        instruction: {
+          key: 'instruction',
+          title: 'Instruction Following',
+          blurb:
+            'Did the video do everything the words asked for? Walk the prompt one bit at a time. If it says first this, then that, the order counts too. A bit that never happens at all is a big miss, not a small one.',
+          slight: 'Both deliver the main beats. One is a little tighter on a small detail.',
+          strong: 'Something asked for is fully missing: the wrong number of things, a missing subject, the wrong style, or the beats out of order.',
+        },
+        visual: {
+          key: 'visual',
+          title: 'Frame Visual Quality',
+          blurb:
+            'Freeze the picture and look at it. Is it sharp, not too bright, not too dark, with real looking colour? Do materials look like what they are, so frost looks like frost and skin looks like skin and not shiny plastic? One blurry face right after a cut counts here too. It does not have to be the whole clip.',
+          slight: 'One soft object or one soft moment, a mild colour cast, slightly flat light.',
+          strong: 'Soft all the way through, several things failing at once, blown out whites, crushed blacks, or a strong colour tint that nothing explains.',
+          note:
+            'A look the maker chose on purpose is not a fault, even if you dislike it. An unexplained tint, blown highlights and crushed blacks are faults. Ask whether the look is something the whole picture is built around, or an error sitting on top of it.',
+        },
+        motion: {
+          key: 'motion',
+          title: 'Motion and Temporal Quality',
+          blurb:
+            'Now watch it move. Does it move the way that thing really moves? Look for stutter, a jerky camera, flicker, and speed that feels wrong, like hands dealing cards far faster than any real person would. Nothing impossible is happening here. It just moves badly.',
+          slight: 'A brief stutter, or movement that is a bit stiff.',
+          strong: 'Stutter or jitter running through the clip, dropped frames, a badly unstable camera, or pacing and cuts that break the action.',
+        },
+        audio: {
+          key: 'audio',
+          title: 'Audio Quality and Sync',
+          blurb:
+            'Turn the sound on before you start. Is it clean, and does it line up with the picture? If you can see a mouth moving, the words should match it. If two people are talking, you should hear two different voices.',
+          slight: 'A bit of hiss, or a footstep landing a hair late.',
+          strong: 'Two people on screen sharing one voice, speech you cannot make out, or a sound the prompt asked for that is simply not there.',
+        },
+        artifacts: {
+          key: 'artifacts',
+          title: 'Less AI Generated',
+          blurb:
+            'Look for things that could not be real. An extra arm appearing, a building growing, an object jumping across the frame, letters turning to mush, five puppies becoming six. This row is not about how it moves. It is about what it is.',
+          slight: 'One short, small tell that you had to scrub back to catch.',
+          strong: 'Impossible things stacked up, or going on and on, the kind an ordinary viewer would notice.',
+        },
+        personId: {
+          key: 'personId',
+          title: 'Person ID Preservation',
+          blurb:
+            'Is it still the same person from the starting picture? Look at the face only. New clothes or a new pose is fine. Check the face at several points in the clip, not just the first frame, because faces drift once the video starts moving. If nobody appears in the reference or in either video, choose N/A.',
+          slight: 'The face drifts a little once she starts moving, but it is still clearly the same person.',
+          strong: 'It stops being the same person.',
+        },
+        contentPres: {
+          key: 'contentPres',
+          title: 'Content and Reference Preservation',
+          blurb:
+            'Everything the prompt did not ask to change should stay the same: the background, the clothing, the objects, the light. Check the last few seconds as well, because this is where it usually slips. If there is nothing to carry over except the person, choose N/A.',
+          slight: 'Detail drift only: a colour shifts, the hair changes, the framing widens, a small accessory goes missing.',
+          strong: 'Core reference content is lost: a person missing, clothing swapped, a different place, the scene no longer joining up.',
+          note:
+            'The reference does not have to be the first frame. Do not mark a clip down just because it does not open on the reference image. Judge whether identity and untargeted content hold across the whole clip.',
+        },
+        humanCreated: {
+          key: 'humanCreated',
+          title: 'Human-Created',
+          blurb:
+            'Which one looks more like a person made it, either real footage someone filmed or art someone drew? A cartoon counts as human made, so looking animated never loses here on its own. This is the same question as Less AI Generated asked the other way round, so the two rows should point the same way.',
+          slight: 'One short, small tell that you had to scrub back to catch.',
+          strong: 'Impossible things stacked up, or going on and on, the kind an ordinary viewer would notice.',
+        },
+      }
+
+      const V_TASKS = {
+        i2v: {
+          id: 'i2v',
+          label: 'Image-to-Video',
+          short: 'I2V',
+          tagline:
+            'One starting picture plus some words, turned into a video. You check the video does what the words asked, and that the person and the scene from the picture survive the whole clip.',
+          axes: ['overall', 'instruction', 'visual', 'motion', 'audio', 'artifacts', 'personId', 'contentPres'],
+        },
+        r2v: {
+          id: 'r2v',
+          label: 'Reference-to-Video',
+          short: 'R2V',
+          tagline:
+            'One or more reference pictures guide the video, but the video does not have to start on any of them. Same rows as I2V, plus the human made question.',
+          axes: ['overall', 'instruction', 'visual', 'motion', 'audio', 'artifacts', 'personId', 'contentPres', 'humanCreated'],
+          note: 'Client guidance written specifically for R2V is still pending, so treat this form as I2V plus the human made row.',
+        },
+        t2v: {
+          id: 't2v',
+          label: 'Text-to-Video',
+          short: 'T2V',
+          tagline:
+            'Words only, no starting picture. There is no reference to preserve, so the six core rows are the whole job and following the prompt carries more weight.',
+          axes: ['overall', 'instruction', 'visual', 'motion', 'audio', 'artifacts'],
+        },
+      }
+
+      const V_OPTIONS = [
+        { value: 2, label: 'Strongly A', side: 'A' },
+        { value: 1, label: 'Slightly A', side: 'A' },
+        { value: 0, label: 'Tie', side: 'T' },
+        { value: -1, label: 'Slightly B', side: 'B' },
+        { value: -2, label: 'Strongly B', side: 'B' },
+      ]
+
+      const V_NA = 'na'
+      const V_NA_OPTION = { value: V_NA, label: 'N/A', side: 'N' }
+
+      /**
+       * Only the two preservation rows carry N/A, because those are the only two
+       * the guidance puts it on. Audio deliberately does not get one: a silent
+       * clip where the prompt implied sound is a failure to score, not a row to
+       * skip.
+       */
+      const V_NA_AXES = { personId: true, contentPres: true }
+
+      const vOptionsFor = (key) => (V_NA_AXES[key] ? V_OPTIONS.concat([V_NA_OPTION]) : V_OPTIONS)
+
+      const vIsScored = (v) => typeof v === 'number'
+
+      /* ----------------------------------------------------------------
+       * Telling the two "something looks wrong" rows apart.
+       * The single most common mix up, so the wording is kept verbatim.
+       * ---------------------------------------------------------------- */
+
+      const MOTION_TELLS = [
+        'Jitter or stutter',
+        'Frame drops',
+        'Unnatural pacing',
+        'POV bounce',
+        'Flickering',
+        'Unstable zoom or pan',
+        'Too many cuts, or cuts for no reason',
+      ]
+
+      const ARTIFACT_TELLS = [
+        'Extra limbs appearing',
+        'Buildings growing',
+        'Objects teleporting',
+        'Shirt numbers or text morphing',
+        'Impossible geometry or physics',
+        'Repeating AI patterns',
+        'Identity drift',
+      ]
+
+      const SPLIT_RULE =
+        'The content is fine but moves badly, that is Motion and Temporal. The content itself could not exist, that is Less AI Generated. Quick trick: pause the video. If a frozen frame, or the change between two frames, shows something impossible, it is Less AI Generated. If every frame looks fine and only the flow is off, it is Motion and Temporal.'
+
+      const MATERIAL_RULE =
+        'How convincingly a material is rendered belongs here: frost that does not read as frost, sugar with no proper grain, skin with a waxy sheen where pores should be. Content that could not exist belongs on Less AI Generated instead: six fingers, a limb appearing, bodies fusing, text morphing.'
+
+      /* ----------------------------------------------------------------
+       * Prompt beats
+       *
+       * Instruction Following is the one row with a checkable structure: the
+       * prompt names beats, and each beat either lands or it does not. A fully
+       * missed requirement is a strong call, so counting misses gives a real
+       * suggestion rather than a guess. It stays a suggestion; a beat both sides
+       * deliver at different quality is not something a checklist can see.
+       * ---------------------------------------------------------------- */
+
+      function beatSuggestion(beats) {
+        const done = (beats || []).filter((b) => b.a !== null && b.b !== null)
+        if (done.length === 0) return null
+        const missA = done.filter((b) => !b.a).length
+        const missB = done.filter((b) => !b.b).length
+        if (missA === missB) {
+          return {
+            value: 0,
+            text:
+              missA === 0
+                ? 'Both clips deliver every beat you listed. If one is still tighter, that is a slight call on how well, not on whether.'
+                : 'Both clips miss ' + missA + ' beat' + (missA === 1 ? '' : 's') + '. Equal misses do not separate them, so this row leans Tie unless the misses differ in severity.',
+          }
+        }
+        const winner = missA < missB ? 'A' : 'B'
+        const loser = winner === 'A' ? 'B' : 'A'
+        const gap = Math.abs(missA - missB)
+        return {
+          value: winner === 'A' ? 2 : -2,
+          text:
+            loser +
+            ' fully misses ' +
+            gap +
+            ' beat' +
+            (gap === 1 ? '' : 's') +
+            ' that ' +
+            winner +
+            ' delivers. A fully missed requirement is a strong call, so this points at Strongly ' +
+            winner +
+            '.',
+        }
+      }
+
+      /* ----------------------------------------------------------------
+       * Calibration review
+       *
+       * Returns the row split and a list of flags. The split is information,
+       * never a verdict: it is shown so the rater can see the shape of their own
+       * annotation, not so they can copy it into the overall row.
+       * ---------------------------------------------------------------- */
+
+      const LEVEL_RANK = { stop: 0, check: 1, note: 2 }
+
+      function reviewVideo(taskId, scores) {
+        const task = V_TASKS[taskId]
+        if (!task) return null
+        const rows = task.axes.filter((k) => k !== 'overall')
+        const filled = task.axes.filter((k) => scores[k] !== undefined).length
+        const total = task.axes.length
+        const complete = filled === total
+
+        const judged = rows.filter((k) => vIsScored(scores[k])).map((k) => scores[k])
+        const winsA = judged.filter((v) => v > 0).length
+        const winsB = judged.filter((v) => v < 0).length
+        const ties = judged.filter((v) => v === 0).length
+        const net = judged.reduce((sum, v) => sum + v, 0)
+        const overall = scores.overall
+        const flags = []
+
+        const add = (level, title, detail) => flags.push({ level, title, detail })
+
+        // Fires as soon as N/A is used, because the rule is about whether the
+        // dimension exists at all and that does not depend on the other rows.
+        const naUsed = rows.filter((k) => scores[k] === V_NA)
+        if (naUsed.length) {
+          add(
+            'note',
+            'Not applicable is in use',
+            'Person ID is not applicable only when no people appear in the reference or in either video. Content preservation is not applicable only when there is no reference content beyond the person. If the dimension applies at all, score it. Do not reach for N/A to dodge a close call.'
+          )
+        }
+
+        // Same axis asked two ways, so opposite answers cannot both be right.
+        if (
+          task.axes.indexOf('humanCreated') !== -1 &&
+          vIsScored(scores.artifacts) &&
+          vIsScored(scores.humanCreated) &&
+          scores.artifacts !== 0 &&
+          scores.humanCreated !== 0 &&
+          Math.sign(scores.artifacts) !== Math.sign(scores.humanCreated)
+        ) {
+          add(
+            'stop',
+            'Human-Created and Less AI Generated disagree',
+            'These are the same axis pointed two ways: the clip that looks more human made is the clip with fewer AI tells. One of these two rows is wrong.'
+          )
+        }
+
+        if (!complete) {
+          flags.sort((x, y) => LEVEL_RANK[x.level] - LEVEL_RANK[y.level])
+          return { complete, filled, total, overall, tally: { winsA, winsB, ties, net, judged: judged.length }, flags }
+        }
+
+        const nonTie = judged.filter((v) => v !== 0)
+
+        if (overall === 0 && ties === judged.length) {
+          add(
+            'stop',
+            'Every single row is a tie',
+            'Tying everything produces no training signal at all. A reviewed annotation that tied every dimension on a hard task was rated 2 out of 5. If you cannot name one dimension where one video is meaningfully better, that is a sign the clips need another watch rather than a sign they are level.'
+          )
+        } else {
+          if (overall === 0) {
+            add(
+              'check',
+              'Overall is a tie',
+              'The instruction is to call a winner even when the difference is small. A tie here needs a reason you can state out loud: same flaw, same frequency, same severity, and you checked both.'
+            )
+          }
+          if (judged.length >= 4 && ties >= Math.ceil(judged.length * 0.6)) {
+            add(
+              'check',
+              'Most rows came out even',
+              'Ties are meant to stay rare. A genuine tie means the same flaw at the same frequency and the same severity in both clips. If you cannot say that sentence about a row, look at it again.'
+            )
+          }
+        }
+
+        // The watch advert lesson: the overall winner was right, two rows were
+        // overcalled because both clips shared the problem.
+        const sweepSide = nonTie.length === judged.length && judged.length >= 3
+          ? winsA === judged.length
+            ? 'A'
+            : winsB === judged.length
+              ? 'B'
+              : null
+          : null
+        if (sweepSide && overall !== 0 && (overall > 0 ? 'A' : 'B') === sweepSide) {
+          add(
+            'check',
+            'One side wins every row',
+            'Clean sweeps are the pattern QA flags most. In the reviewed watch advert the overall winner was right, but two rows were overcalled because both clips had the same problem and only one was marked down for it. A strong annotation says what is wrong with the winner too.'
+          )
+        }
+
+        // The protest speech lesson: legitimate, but it is the exception and it
+        // has to be argued rather than left implicit.
+        if (overall !== 0 && nonTie.length > 0) {
+          const overallSide = overall > 0 ? 1 : -1
+          const opposed = nonTie.every((v) => Math.sign(v) !== overallSide)
+          if (opposed) {
+            add(
+              'check',
+              'Overall goes against every row that split',
+              'This can be right. In the reviewed protest clip the overall went to the video that lost on motion and on AI tells, because the other one missed the spine of the prompt. Treat it as the exception, not the rule: write down which requirement the other video misses and why that decides the call.'
+            )
+          }
+        }
+
+        if (Math.abs(overall) === 2 && !judged.some((v) => Math.abs(v) === 2)) {
+          add(
+            'check',
+            'Strongly overall with no strong call anywhere below',
+            'A strong overall means you would pick it instantly, because the other one misses the prompt’s spine or feels broken. If no single row carries a strong call, write the sentence that says where the decisive gap actually is.'
+          )
+        }
+
+        if (nonTie.length >= 3 && nonTie.every((v) => Math.abs(v) === 1) && Math.abs(overall) <= 1) {
+          add(
+            'note',
+            'Every call you made is a slight',
+            'Reaching for slightly to stay safe is explicitly wrong, because it shrinks real gaps and creates misleading signal. Slightly against strongly measures how big the real difference is, not how sure you feel. Ask how much better the winner is, not how confident you are.'
+          )
+        }
+
+        flags.sort((x, y) => LEVEL_RANK[x.level] - LEVEL_RANK[y.level])
+        return { complete, filled, total, overall, tally: { winsA, winsB, ties, net, judged: judged.length }, flags }
+      }
+
+      /**
+       * Pace note.
+       *
+       * The material gives two data points rather than a rule: an annotation at
+       * 6 minutes 20 was accepted, and one at 1 minute 39 was rated 2 out of 5
+       * with the comment that it is less time than it takes to watch both clips
+       * once. The three minute line below is ours, drawn from those two points
+       * plus the instruction to watch the videos multiple times, one dimension
+       * per pass. It is a nudge, not a rule.
+       */
+      function paceNote(seconds, axisCount) {
+        if (!seconds || seconds < 20) return null
+        const floor = 60 * (axisCount >= 8 ? 3 : 2.5)
+        if (seconds >= floor) return null
+        return {
+          level: 'check',
+          title: 'That was quick',
+          detail:
+            'You have spent ' +
+            Math.round(seconds) +
+            ' seconds so far. Two clips watched more than once, plus ' +
+            axisCount +
+            ' rows judged, usually takes longer than that. A reviewed annotation submitted in 1 minute 39 was marked down for exactly this. Our own floor, not a published one.',
+        }
+      }
+
+      /* ----------------------------------------------------------------
+       * Justification skeleton
+       *
+       * The calculator knows which side won each row. It has not seen the
+       * videos, so every claim about what is on screen is left as a bracket for
+       * the rater. The brackets are written for video specifically: they ask for
+       * a timestamp, because every reviewer comment in the material cites one.
+       * ---------------------------------------------------------------- */
+
+      const V_AXIS_PHRASE = {
+        instruction: 'instruction following',
+        visual: 'frame visual quality',
+        motion: 'motion and temporal quality',
+        audio: 'audio quality and sync',
+        artifacts: 'AI tells',
+        personId: 'person ID preservation',
+        contentPres: 'content preservation',
+        humanCreated: 'how human made it looks',
+      }
+
+      const V_ORDER = ['instruction', 'visual', 'motion', 'audio', 'artifacts', 'personId', 'contentPres', 'humanCreated']
+
+      /** What the rater has to supply, phrased per row so the bracket is usable. */
+      const V_EVIDENCE = {
+        instruction: [
+          'name the beat from the prompt that is missing, late, or out of order',
+          'quote the part of the prompt that does not get delivered',
+          'say which requirement lands in one clip and not the other',
+        ],
+        visual: [
+          'name the object and the time, for example his face goes soft at 0:07 right after the cut',
+          'say what is soft, blown out, or wrongly tinted, and when it happens',
+          'name the material that does not read right, such as frost, sugar, glass, or skin',
+        ],
+        motion: [
+          'name the moment and the time, for example the camera stutters at 0:04 as it pans',
+          'say what moves at the wrong speed, and when',
+          'describe the pacing problem and where in the clip it starts',
+        ],
+        audio: [
+          'say what you heard and when, for example the second voice never arrives',
+          'name the sound the prompt asked for that is missing, late, or garbled',
+          'describe the sync slip and give the timestamp',
+        ],
+        artifacts: [
+          'name the impossible detail and when it shows up, for example the count changes at 0:06',
+          'say what could not exist in real footage, and where in the clip it is',
+          'name the tell, and say whether it is one blip or runs through the whole clip',
+        ],
+        personId: [
+          'say where in the clip the face drifts, and what changes about it',
+          'name the feature that moves away from the reference, such as the jaw, the hairline, or the width of the face',
+          'say at what second identity stops holding',
+        ],
+        contentPres: [
+          'name what changed that the prompt never asked to change',
+          'say which part of the background, the clothing, or the lighting drifts, and when',
+          'name the detail from the reference that does not carry over',
+        ],
+        humanCreated: [
+          'name the tell that gives it away as generated',
+          'say what a real camera, or a real artist, would not have produced here',
+          'describe what makes the other clip read as something a person made',
+        ],
+      }
+
+      /** For a row that came out even: what both clips share. */
+      const V_SHARED = {
+        instruction: 'say which beats both clips deliver',
+        visual: 'name the softness or the cast that shows up in both',
+        motion: 'name the movement problem that appears in both, at the same severity',
+        audio: 'say what both tracks do, and why neither is cleaner',
+        artifacts: 'name the tell that appears in both clips',
+        personId: 'say how the face holds, or drifts, the same amount in both',
+        contentPres: 'name the untargeted region that is near identical in both',
+        humanCreated: 'name the tell that both clips carry',
+      }
+
+      const V_PHRASES = {
+        overallStrong: [
+          'I strongly prefer Response {W} overall: [say in one line what makes it the clearly stronger video].',
+          'Response {W} is the clearly stronger video: [name the thing that decides it instantly].',
+          'This is a strong overall preference for Response {W}: [say what {L} misses or breaks].',
+        ],
+        overallSlight: [
+          'I slightly prefer Response {W} overall: [say what tipped it, knowing it was close].',
+          'Response {W} has the narrow edge overall: [name the one thing that decided it].',
+          'On balance the stronger video is Response {W}: [say what you kept coming back to].',
+        ],
+        overallTie: [
+          'Neither video is stronger overall: [state the reason they are genuinely level, the same flaw at the same frequency and the same severity in both].',
+          'I cannot separate the two videos overall: [say what you compared and why it came out even].',
+        ],
+        // Every frame here has to read correctly whether the bracket ends up
+        // naming a strength in the winner or a failure in the loser, because
+        // most of the evidence prompts ask for the failure.
+        wins: [
+          'On {axis}, {W} is stronger: [{ev}].',
+          '{W} leads on {axis}, and the gap against {L} is this: [{ev}].',
+          'Looking at {axis}, {W} comes out ahead: [{ev}].',
+        ],
+        even: [
+          '{Axis} is even: both clips [{ev}], so it does not separate them.',
+          'Neither clip gains on {axis}, since [{ev}] in both.',
+          'On {axis} the two are level: [{ev}].',
+        ],
+        notApplicable: [
+          '{Axis} does not apply here: [say why, for example nobody appears in the reference or in either clip].',
+          '{Axis} is out of scope for this pair: [say what the reference actually shows].',
+        ],
+        sweep: [
+          'What is wrong with the winner: [name a flaw in {W} as well, because a sweep with nothing said against the winner is the pattern reviewers flag most].',
+          'Against {W}: [name the problem the winning clip also has, so the annotation is not a clean sweep with no evidence].',
+        ],
+        tradeoff: [
+          'Trade-off: {L} is ahead on {loseList}, but [say why that matters less than what {W} wins on].',
+          'Weighing it up: {L} does take {loseList}, though [explain why {W} is still the stronger video].',
+          'The trade-off is that {W} gives up {loseList}, and [say why the rest outweighs it].',
+        ],
+        opposed: [
+          'Overall goes against the rows on purpose: [name the requirement {L} misses that decides the call, since Overall is not a row tally].',
+          'The rows lean one way and the overall does not, which is deliberate: [say which part of the prompt {L} fails and why it outweighs the rest].',
+        ],
+      }
+
+      const vPick = (list, seed, offset) => list[Math.abs(seed + offset) % list.length]
+
+      const vFill = (template, vars) =>
+        template.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? vars[key] : m))
+
+      const vList = (items) =>
+        items.length <= 1
+          ? items[0] || ''
+          : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1]
+
+      const vCap = (t) => t.charAt(0).toUpperCase() + t.slice(1)
+
+      /**
+       * Build the skeleton. Returns null until every row, including Overall, has
+       * a value, because a half scored annotation would produce sentences the
+       * rater has not actually decided yet.
+       */
+      function buildVideoStarter(taskId, scores, seed) {
+        const review = reviewVideo(taskId, scores)
+        if (!review || !review.complete) return null
+        const s = seed || 0
+        const task = V_TASKS[taskId]
+        const rows = V_ORDER.filter((k) => task.axes.indexOf(k) !== -1)
+        const overall = scores.overall
+        const W = overall > 0 ? 'A' : overall < 0 ? 'B' : 'T'
+        const L = W === 'A' ? 'B' : 'A'
+        const lines = []
+
+        // 1. Overall first, because that is the order the task is scored in.
+        if (W === 'T') {
+          lines.push(vPick(V_PHRASES.overallTie, s, 0))
+        } else {
+          const pool = Math.abs(overall) === 2 ? V_PHRASES.overallStrong : V_PHRASES.overallSlight
+          lines.push(vFill(vPick(pool, s, 0), { W, L }))
+        }
+
+        // 2. One clause per row, each carrying its own evidence bracket.
+        rows.forEach((k, i) => {
+          const v = scores[k]
+          const axis = V_AXIS_PHRASE[k]
+          if (v === V_NA) {
+            lines.push(vFill(vPick(V_PHRASES.notApplicable, s, i + 1), { axis, Axis: vCap(axis) }))
+          } else if (v === 0) {
+            lines.push(
+              vFill(vPick(V_PHRASES.even, s, i + 1), {
+                axis,
+                Axis: vCap(axis),
+                ev: V_SHARED[k],
+              })
+            )
+          } else {
+            lines.push(
+              vFill(vPick(V_PHRASES.wins, s, i + 1), {
+                axis,
+                Axis: vCap(axis),
+                W: v > 0 ? 'A' : 'B',
+                L: v > 0 ? 'B' : 'A',
+                ev: vPick(V_EVIDENCE[k], s, i + 1),
+              })
+            )
+          }
+        })
+
+        // 3. The lines the flags say are missing. These are the parts reviewers
+        //    actually mark down, so they are written into the skeleton rather
+        //    than left as advice next to it.
+        const ids = review.flags.map((f) => f.title)
+        if (ids.indexOf('One side wins every row') !== -1) {
+          lines.push(vFill(vPick(V_PHRASES.sweep, s, 11), { W, L }))
+        }
+        if (ids.indexOf('Overall goes against every row that split') !== -1) {
+          lines.push(vFill(vPick(V_PHRASES.opposed, s, 12), { W, L }))
+        }
+
+        // 4. The trade off, which reviewers say is the part most often absent.
+        if (W !== 'T') {
+          const lost = rows
+            .filter((k) => vIsScored(scores[k]) && (W === 'A' ? scores[k] < 0 : scores[k] > 0))
+            .map((k) => V_AXIS_PHRASE[k])
+          if (lost.length) {
+            lines.push(vFill(vPick(V_PHRASES.tradeoff, s, 13), { W, L, loseList: vList(lost) }))
+          }
+        }
+
+        return lines.join(' ')
+      }
+
+      /** Every wording for every slot, so seven people do not submit one sentence. */
+      function videoStarterAlternatives(taskId, scores) {
+        const review = reviewVideo(taskId, scores)
+        if (!review || !review.complete) return []
+        const task = V_TASKS[taskId]
+        const overall = scores.overall
+        const W = overall > 0 ? 'A' : overall < 0 ? 'B' : 'T'
+        const L = W === 'A' ? 'B' : 'A'
+        const out = []
+
+        const overallPool =
+          W === 'T' ? V_PHRASES.overallTie : Math.abs(overall) === 2 ? V_PHRASES.overallStrong : V_PHRASES.overallSlight
+        out.push({ slot: 'Overall', options: overallPool.map((t) => vFill(t, { W, L })) })
+
+        V_ORDER.filter((k) => task.axes.indexOf(k) !== -1).forEach((k) => {
+          const v = scores[k]
+          const axis = V_AXIS_PHRASE[k]
+          if (v === V_NA) {
+            out.push({
+              slot: V_AXES[k].title,
+              options: V_PHRASES.notApplicable.map((t) => vFill(t, { axis, Axis: vCap(axis) })),
+            })
+          } else if (v === 0) {
+            out.push({
+              slot: V_AXES[k].title,
+              options: V_PHRASES.even.map((t) => vFill(t, { axis, Axis: vCap(axis), ev: V_SHARED[k] })),
+            })
+          } else {
+            const winner = v > 0 ? 'A' : 'B'
+            const loser = v > 0 ? 'B' : 'A'
+            const opts = []
+            V_PHRASES.wins.forEach((frame) => {
+              V_EVIDENCE[k].forEach((ev) => {
+                opts.push(vFill(frame, { axis, Axis: vCap(axis), W: winner, L: loser, ev }))
+              })
+            })
+            out.push({ slot: V_AXES[k].title, options: opts })
+          }
+        })
+
+        return out
+      }
+
+      /* ---8<--- VIDEO END */
+
+      /* ================================================================
+       * Presentation
+       * ================================================================ */
+
+      const V_SIDE_THEME = {
+        A: { chip: 'bg-emerald-500 text-emerald-950', pill: 'bg-emerald-500 text-emerald-950 shadow-emerald-500/30' },
+        B: { chip: 'bg-amber-500 text-amber-950', pill: 'bg-amber-500 text-amber-950 shadow-amber-500/30' },
+        T: { chip: 'bg-slate-300 text-slate-900', pill: 'bg-slate-300 text-slate-900 shadow-slate-400/30' },
+        N: { chip: 'bg-slate-600 text-slate-100', pill: 'bg-slate-600 text-slate-100 shadow-slate-700/30' },
+      }
+
+      const FLAG_THEME = {
+        stop: { box: 'border-rose-500/40 bg-rose-500/10', dot: 'bg-rose-400', label: 'Fix this' },
+        check: { box: 'border-amber-500/40 bg-amber-500/10', dot: 'bg-amber-400', label: 'Check' },
+        note: { box: 'border-sky-500/40 bg-sky-500/10', dot: 'bg-sky-400', label: 'Note' },
+      }
+
+      const cx = (...c) => c.filter(Boolean).join(' ')
+
+      const mmss = (s) => {
+        const m = Math.floor(s / 60)
+        const r = Math.floor(s % 60)
+        return m + ':' + (r < 10 ? '0' : '') + r
+      }
+
+      function TaskCard({ task, onSelect }) {
+        return (
+          <button
+            onClick={() => onSelect(task.id)}
+            className="group relative flex w-full flex-col gap-4 overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/60 p-7 text-left transition hover:-translate-y-1 hover:border-indigo-400/60 hover:bg-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 sm:p-8"
+          >
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-indigo-500/10 blur-2xl transition group-hover:bg-indigo-500/25" />
+            <span className="inline-flex w-fit items-center rounded-lg bg-indigo-500/15 px-2.5 py-1 text-xs font-bold tracking-widest text-indigo-300">
+              {task.short}
+            </span>
+            <div>
+              <h3 className="text-xl font-semibold text-slate-50 sm:text-2xl">{task.label}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{task.tagline}</p>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-sm font-medium text-indigo-300">
+              {task.axes.length} rows
+              <span className="transition group-hover:translate-x-1">&rarr;</span>
+            </div>
+          </button>
+        )
+      }
+
+      /** Collapsible helper, used for the tells lists and the severity split. */
+      function Disclose({ label, children }) {
+        const [open, setOpen] = useState(false)
+        return (
+          <div className="mt-4 border-t border-slate-800 pt-3">
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-xs font-semibold text-slate-400 transition hover:text-slate-200"
+            >
+              <span>{label}</span>
+              <span>{open ? 'hide' : 'show'}</span>
+            </button>
+            {open && <div className="mt-3">{children}</div>}
+          </div>
+        )
+      }
+
+      function SeveritySplit({ axis }) {
+        return (
+          <dl className="grid gap-2 text-xs leading-relaxed sm:grid-cols-2">
+            <div className="rounded-lg bg-slate-950/60 p-3">
+              <dt className="font-bold uppercase tracking-wider text-slate-500">Slightly</dt>
+              <dd className="mt-1 text-slate-400">{axis.slight}</dd>
+            </div>
+            <div className="rounded-lg bg-slate-950/60 p-3">
+              <dt className="font-bold uppercase tracking-wider text-slate-500">Strongly</dt>
+              <dd className="mt-1 text-slate-400">{axis.strong}</dd>
+            </div>
+          </dl>
+        )
+      }
+
+      function TellsTable() {
+        const col = (title, items, tone) => (
+          <div className="rounded-lg bg-slate-950/60 p-3">
+            <div className={cx('text-xs font-bold uppercase tracking-wider', tone)}>{title}</div>
+            <ul className="mt-2 space-y-1 text-xs text-slate-400">
+              {items.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+          </div>
+        )
+        return (
+          <div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {col('Motion: how it moves', MOTION_TELLS, 'text-emerald-300')}
+              {col('Less AI Generated: what it is', ARTIFACT_TELLS, 'text-rose-300')}
+            </div>
+            <p className="mt-2.5 text-xs leading-relaxed text-slate-500">{SPLIT_RULE}</p>
+          </div>
+        )
+      }
+
+      /** The prompt beat checklist that sits under Instruction Following. */
+      function BeatChecklist({ beats, onChange }) {
+        const [draft, setDraft] = useState('')
+        const suggestion = useMemo(() => beatSuggestion(beats), [beats])
+
+        const addBeat = () => {
+          const text = draft.trim()
+          if (!text) return
+          onChange(beats.concat([{ text, a: null, b: null }]))
+          setDraft('')
+        }
+
+        const toggle = (i, which) => {
+          onChange(
+            beats.map((b, j) => (j === i ? Object.assign({}, b, { [which]: b[which] === true ? false : true }) : b))
+          )
+        }
+
+        const remove = (i) => onChange(beats.filter((_, j) => j !== i))
+
+        const mark = (b, which, i) => {
+          const state = b[which]
+          return (
+            <button
+              onClick={() => toggle(i, which)}
+              aria-label={'Response ' + which.toUpperCase() + ' delivers: ' + b.text}
+              className={cx(
+                'h-7 w-9 shrink-0 rounded-md text-xs font-bold transition',
+                state === true
+                  ? 'bg-emerald-500 text-emerald-950'
+                  : state === false
+                    ? 'bg-rose-500 text-rose-950'
+                    : 'bg-slate-800 text-slate-500 hover:bg-slate-700'
+              )}
+            >
+              {which.toUpperCase()}
+            </button>
+          )
+        }
+
+        return (
+          <div>
+            <p className="text-xs leading-relaxed text-slate-500">
+              Type each thing the prompt asks for, one per line, then tap A and B for whether that clip
+              delivers it. Green means delivered, red means missed, grey means not checked yet. This only
+              answers whether a beat happens, so the suggestion below is a starting point and not the score.
+            </p>
+
+            <div className="mt-3 flex gap-2">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addBeat()
+                  }
+                }}
+                placeholder="she catches the ball, then spikes it"
+                className="min-w-0 flex-1 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none"
+              />
+              <button
+                onClick={addBeat}
+                className="shrink-0 rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700"
+              >
+                Add
+              </button>
+            </div>
+
+            {beats.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {beats.map((b, i) => (
+                  <li key={i} className="flex items-center gap-2 rounded-lg bg-slate-950/60 p-2">
+                    <span className="min-w-0 flex-1 text-xs leading-relaxed text-slate-300">{b.text}</span>
+                    {mark(b, 'a', i)}
+                    {mark(b, 'b', i)}
+                    <button
+                      onClick={() => remove(i)}
+                      aria-label={'Remove beat: ' + b.text}
+                      className="shrink-0 rounded-md px-2 py-1 text-xs text-slate-600 transition hover:text-rose-300"
+                    >
+                      &times;
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {suggestion && (
+              <p className="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs leading-relaxed text-indigo-200">
+                {suggestion.text}
+              </p>
+            )}
+          </div>
+        )
+      }
+
+      function AxisRow({ axis, index, value, onChange, beats, onBeats }) {
+        const opts = vOptionsFor(axis.key)
+        return (
+          <section
+            className={cx(
+              'rounded-2xl border p-5 transition sm:p-6',
+              axis.decisive
+                ? 'border-indigo-500/40 bg-indigo-500/[0.07] ring-1 ring-indigo-500/20'
+                : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className={cx(
+                  'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold',
+                  axis.decisive ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
+                )}
+              >
+                {index + 1}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-slate-100 sm:text-lg">
+                  {axis.title}
+                  {axis.decisive && (
+                    <span className="ml-2 rounded-md bg-indigo-500/20 px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                      Score first
+                    </span>
+                  )}
+                </h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{axis.blurb}</p>
+                {axis.note && (
+                  <p className="mt-2 rounded-lg bg-slate-950/50 p-2.5 text-xs leading-relaxed text-slate-500">
+                    {axis.note}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div
+              role="radiogroup"
+              aria-label={axis.title}
+              className={cx('mt-5 grid grid-cols-2 gap-2', opts.length > 5 ? 'sm:grid-cols-6' : 'sm:grid-cols-5')}
+            >
+              {opts.map((opt) => {
+                const active = value === opt.value
+                const theme = V_SIDE_THEME[opt.side]
+                return (
+                  <button
+                    key={opt.value}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => onChange(axis.key, active ? undefined : opt.value)}
+                    className={cx(
+                      'rounded-xl px-3 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                      opt.value === 0 && 'col-span-2 sm:col-span-1',
+                      active ? cx(theme.pill, 'shadow-lg') : 'bg-slate-800/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <Disclose label="Slightly or strongly?">
+              <SeveritySplit axis={axis} />
+            </Disclose>
+
+            {axis.key === 'instruction' && (
+              <Disclose label="Walk the prompt beat by beat">
+                <BeatChecklist beats={beats || []} onChange={onBeats} />
+              </Disclose>
+            )}
+
+            {(axis.key === 'motion' || axis.key === 'artifacts') && (
+              <Disclose label="Is it how it moves, or what it is?">
+                <TellsTable />
+              </Disclose>
+            )}
+
+            {axis.key === 'visual' && (
+              <Disclose label="Where does material realism go?">
+                <p className="text-xs leading-relaxed text-slate-400">{MATERIAL_RULE}</p>
+              </Disclose>
+            )}
+          </section>
+        )
+      }
+
+      function ReviewCard({ review, pace }) {
+        const overall = review.overall
+        const side = overall === undefined ? null : overall > 0 ? 'A' : overall < 0 ? 'B' : 'T'
+        const label =
+          overall === undefined
+            ? null
+            : (V_OPTIONS.find((o) => o.value === overall) || {}).label
+        const flags = pace ? review.flags.concat([pace]) : review.flags
+
+        return (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Your call</h2>
+              <span className="rounded-md bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-400">
+                {review.filled}/{review.total}
+              </span>
+            </div>
+
+            {side ? (
+              <div className={cx('mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-2xl font-bold', V_SIDE_THEME[side].chip)}>
+                {label}
+              </div>
+            ) : (
+              <React.Fragment>
+                <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                    style={{ width: (review.filled / review.total) * 100 + '%' }}
+                  />
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-slate-400">
+                  Start with Overall Preference. It is a gut call on which is the stronger video, and this tool
+                  will never fill it in for you.
+                </p>
+              </React.Fragment>
+            )}
+
+            <div className="mt-5 border-t border-white/10 pt-4">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">How the rows split</span>
+                <span className="text-[10px] uppercase tracking-wider text-slate-600">not the verdict</span>
+              </div>
+              <dl className="mt-2 grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wider text-slate-500">A</dt>
+                  <dd className="mt-1 text-lg font-semibold text-emerald-300">{review.tally.winsA}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wider text-slate-500">B</dt>
+                  <dd className="mt-1 text-lg font-semibold text-amber-300">{review.tally.winsB}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wider text-slate-500">Tie</dt>
+                  <dd className="mt-1 text-lg font-semibold text-slate-300">{review.tally.ties}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wider text-slate-500">Net</dt>
+                  <dd className="mt-1 text-lg font-semibold text-slate-200">
+                    {review.tally.net > 0 ? '+' + review.tally.net : review.tally.net}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
+                This count is here so you can see the shape of your own annotation. It is not how the overall is
+                decided, and copying it into the overall row is marked wrong.
+              </p>
+            </div>
+
+            {flags.length > 0 && (
+              <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
+                {flags.map((f, i) => {
+                  const theme = FLAG_THEME[f.level]
+                  return (
+                    <div key={i} className={cx('rounded-xl border p-3', theme.box)}>
+                      <div className="flex items-center gap-2">
+                        <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', theme.dot)} />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {theme.label}
+                        </span>
+                      </div>
+                      <h4 className="mt-1.5 text-sm font-semibold text-slate-100">{f.title}</h4>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-400">{f.detail}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {review.complete && flags.length === 0 && (
+              <div className="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 border-t">
+                <h4 className="text-sm font-semibold text-emerald-200">Nothing flagged</h4>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                  No calibration pattern to warn you about. That is not the same as being right, so read your
+                  justification back and check every claim names something you actually saw.
+                </p>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      function FeedbackStarter({ text, alternatives, onReword }) {
+        const [showBank, setShowBank] = useState(false)
+        const [status, setStatus] = useState('idle')
+        const textRef = useRef(null)
+
+        useEffect(() => setStatus('idle'), [text])
+
+        const words = text.trim().split(/\s+/).length
+
+        const copyViaTextarea = () => {
+          const ta = document.createElement('textarea')
+          ta.value = text
+          ta.setAttribute('readonly', '')
+          ta.style.position = 'fixed'
+          ta.style.top = '0'
+          ta.style.opacity = '0'
+          document.body.appendChild(ta)
+          ta.select()
+          let ok = false
+          try {
+            ok = document.execCommand('copy')
+          } catch (err) {
+            ok = false
+          }
+          document.body.removeChild(ta)
+          return ok
+        }
+
+        const selectVisibleText = () => {
+          if (!textRef.current) return
+          const range = document.createRange()
+          range.selectNodeContents(textRef.current)
+          const sel = window.getSelection()
+          sel.removeAllRanges()
+          sel.addRange(range)
+        }
+
+        const copy = async () => {
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(text)
+              setStatus('copied')
+              setTimeout(() => setStatus('idle'), 2000)
+              return
+            }
+          } catch (err) {
+            // Fall through to the legacy path.
+          }
+          if (copyViaTextarea()) {
+            setStatus('copied')
+            setTimeout(() => setStatus('idle'), 2000)
+            return
+          }
+          selectVisibleText()
+          setStatus('manual')
+        }
+
+        const copied = status === 'copied'
+
+        return (
+          <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Justification skeleton</h3>
+              <span
+                className={cx(
+                  'rounded-md px-2 py-1 text-xs font-semibold',
+                  words >= 20 && text.length >= 100 ? 'bg-slate-800/80 text-slate-400' : 'bg-rose-500/20 text-rose-300'
+                )}
+                title="Answers under 20 words are rejected"
+              >
+                {words} words &middot; {text.length} chars
+              </span>
+            </div>
+
+            <p
+              ref={textRef}
+              className="mt-3 max-h-72 overflow-y-auto rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-300 selection:bg-indigo-500/40"
+            >
+              {text}
+            </p>
+
+            <button
+              onClick={copy}
+              className={cx(
+                'mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                copied
+                  ? 'bg-emerald-500 text-emerald-950'
+                  : status === 'manual'
+                    ? 'bg-amber-500 text-amber-950'
+                    : 'bg-indigo-500 text-white hover:bg-indigo-400'
+              )}
+            >
+              {copied ? 'Copied' : status === 'manual' ? 'Selected, press Ctrl+C' : 'Copy skeleton'}
+            </button>
+
+            <button
+              onClick={onReword}
+              className="mt-2 w-full rounded-xl border border-slate-800 px-4 py-2 text-xs font-medium text-slate-400 transition hover:border-slate-600 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            >
+              Reword it
+            </button>
+
+            <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
+              Replace every bracket with the moment you actually saw, with a timestamp where you can give one,
+              such as "his face goes blurry at 0:07 after the cut", never "B looks better". Every reviewer comment
+              in the guidance names a specific thing at a specific time.
+            </p>
+
+            {alternatives && alternatives.length > 0 && (
+              <div className="mt-3 border-t border-slate-800 pt-3">
+                <button
+                  onClick={() => setShowBank((v) => !v)}
+                  className="flex w-full items-center justify-between text-xs font-semibold text-slate-400 transition hover:text-slate-200"
+                >
+                  <span>Other ways to say it</span>
+                  <span>{showBank ? 'hide' : 'show'}</span>
+                </button>
+                {showBank && (
+                  <div className="mt-3 space-y-3">
+                    {alternatives.map((group) => (
+                      <div key={group.slot}>
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{group.slot}</div>
+                        <ul className="mt-1 space-y-1">
+                          {group.options.map((opt, i) => (
+                            <li key={i} className="rounded-lg bg-slate-950/50 px-2.5 py-1.5 text-xs leading-relaxed text-slate-400">
+                              {opt}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      function App() {
+        const [taskId, setTaskId] = useState(null)
+        const [scores, setScores] = useState({})
+        const [beats, setBeats] = useState([])
+        const [startedAt, setStartedAt] = useState(null)
+        const [now, setNow] = useState(Date.now())
+        const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
+
+        const task = taskId ? V_TASKS[taskId] : null
+
+        // The clock starts when a task is opened and runs until it is closed, so
+        // the pace note has something honest to measure.
+        useEffect(() => {
+          if (!startedAt) return
+          const id = setInterval(() => setNow(Date.now()), 1000)
+          return () => clearInterval(id)
+        }, [startedAt])
+
+        const pickTask = (id) => {
+          setTaskId(id)
+          setScores({})
+          setBeats([])
+          setStartedAt(Date.now())
+        }
+
+        const reset = () => {
+          setTaskId(null)
+          setScores({})
+          setBeats([])
+          setStartedAt(null)
+        }
+
+        const setScore = useCallback((axisKey, value) => {
+          setScores((prev) => {
+            const next = Object.assign({}, prev)
+            if (value === undefined) delete next[axisKey]
+            else next[axisKey] = value
+            return next
+          })
+        }, [])
+
+        const elapsed = startedAt ? (now - startedAt) / 1000 : 0
+        const review = useMemo(() => (task ? reviewVideo(task.id, scores) : null), [task, scores])
+        const pace = useMemo(
+          () => (review && review.complete ? paceNote(elapsed, task.axes.length) : null),
+          // Recomputed only on completion, so the warning does not appear and
+          // vanish while the rater is still part way through.
+          [review && review.complete, task, Math.floor(elapsed)]
+        )
+        const starter = useMemo(() => (task ? buildVideoStarter(task.id, scores, seed) : null), [task, scores, seed])
+        const alternatives = useMemo(() => (task ? videoStarterAlternatives(task.id, scores) : []), [task, scores])
+
+        // Number keys score the next unfilled row, backspace undoes the last.
+        useEffect(() => {
+          if (!task) return
+          const onKey = (e) => {
+            if (e.metaKey || e.ctrlKey || e.altKey) return
+            const tag = (e.target && e.target.tagName) || ''
+            // The beat checklist has a text input, so the shortcuts have to stay
+            // out of the way while someone is typing into it.
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return
+            const idx = ['1', '2', '3', '4', '5', '6'].indexOf(e.key)
+            if (idx !== -1) {
+              const nextAxis = task.axes.find((k) => scores[k] === undefined)
+              if (nextAxis) {
+                const opts = vOptionsFor(nextAxis)
+                if (idx < opts.length) setScore(nextAxis, opts[idx].value)
+              }
+              return
+            }
+            if (e.key === 'Backspace') {
+              const lastFilled = task.axes.slice().reverse().find((k) => scores[k] !== undefined)
+              if (lastFilled) setScore(lastFilled, undefined)
+            }
+          }
+          window.addEventListener('keydown', onKey)
+          return () => window.removeEventListener('keydown', onKey)
+        }, [task, scores, setScore])
+
+        return (
+          <div className="min-h-screen bg-slate-950 text-slate-200 antialiased">
+            <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+              <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-lg">
+                    &#127916;
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold text-slate-50">Project Hedgehog</h1>
+                    <p className="text-xs tracking-wide text-slate-500">Video Calculator</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {task && (
+                    <span
+                      className="rounded-xl border border-slate-800 px-3 py-2 font-mono text-sm text-slate-400"
+                      title="Time on this pair"
+                    >
+                      {mmss(elapsed)}
+                    </span>
+                  )}
+                  <a
+                    href="./index.html"
+                    className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                  >
+                    Image tasks
+                  </a>
+                  <a
+                    href="./training.html"
+                    className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+                  >
+                    Training
+                  </a>
+                  {task && (
+                    <button
+                      onClick={reset}
+                      className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                    >
+                      &larr; Back
+                    </button>
+                  )}
+                </div>
+              </header>
+
+              {!task ? (
+                <main className="mx-auto max-w-3xl">
+                  <h2 className="text-center text-2xl font-semibold text-slate-50 sm:text-3xl">
+                    Which video task are you rating?
+                  </h2>
+                  <p className="mt-3 text-center text-sm text-slate-400">
+                    Two clips from the same prompt, side A against side B.
+                  </p>
+                  <div className="mt-6 rounded-2xl border border-indigo-500/30 bg-indigo-500/[0.07] p-5">
+                    <h3 className="text-sm font-semibold text-indigo-200">The one rule that makes video different</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                      On the image tasks the calculator works out the overall for you from the rows. Video does not
+                      work that way. Overall Preference is a gut call, you make it first, and it is explicitly not
+                      an average or a count of the rows. So this page will never decide it for you. It shows you how
+                      your rows landed and flags the habits reviewers keep catching.
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                      Before you start: turn the sound on, read the prompt, and watch both clips all the way through
+                      at normal speed. Then go one row at a time, watching again for each.
+                    </p>
+                  </div>
+                  <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                    {Object.keys(V_TASKS).map((id) => (
+                      <TaskCard key={id} task={V_TASKS[id]} onSelect={pickTask} />
+                    ))}
+                  </div>
+                </main>
+              ) : (
+                <main className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+                  <div className="space-y-4">
+                    <div className="flex items-baseline justify-between">
+                      <h2 className="text-xl font-semibold text-slate-50">
+                        {task.label} <span className="text-slate-500">&middot; {task.axes.length} rows</span>
+                      </h2>
+                      <span className="hidden text-xs text-slate-500 sm:block">
+                        Keys <kbd className="rounded bg-slate-800 px-1.5 py-0.5">1</kbd> to{' '}
+                        <kbd className="rounded bg-slate-800 px-1.5 py-0.5">5</kbd> to score,{' '}
+                        <kbd className="rounded bg-slate-800 px-1.5 py-0.5">&#9003;</kbd> to undo
+                      </span>
+                    </div>
+
+                    {task.note && (
+                      <p className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs leading-relaxed text-slate-500">
+                        {task.note}
+                      </p>
+                    )}
+
+                    {task.axes.map((key, i) => (
+                      <React.Fragment key={key}>
+                        <AxisRow
+                          index={i}
+                          axis={V_AXES[key]}
+                          value={scores[key]}
+                          onChange={setScore}
+                          beats={beats}
+                          onBeats={setBeats}
+                        />
+                        {key === 'overall' && (
+                          <p className="px-1 text-xs leading-relaxed text-slate-500">
+                            Now the rows below. Each one asks its own question and is scored on its own evidence.
+                            The most common mistake is letting a feeling about one row bleed into the others, so a
+                            clip that looks more real picks up wins it did not earn. One thing you noticed can count
+                            on two rows, but only if it independently belongs on each.
+                          </p>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  <aside className="lg:sticky lg:top-8">
+                    <ReviewCard review={review} pace={pace} />
+                    {starter && (
+                      <FeedbackStarter
+                        text={starter}
+                        alternatives={alternatives}
+                        onReword={() => setSeed((s) => s + 1)}
+                      />
+                    )}
+                    <button
+                      onClick={() => {
+                        setScores({})
+                        setBeats([])
+                        setStartedAt(Date.now())
+                      }}
+                      className="mt-3 w-full rounded-xl border border-slate-800 px-4 py-2.5 text-sm font-medium text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
+                    >
+                      Clear and restart the clock
+                    </button>
+                  </aside>
+                </main>
+              )}
+            </div>
+          </div>
+        )
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+    </script>
+  </body>
+</html>

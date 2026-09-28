@@ -24,7 +24,7 @@ const read = (...p) => readFileSync(join(...p), 'utf8')
 
 // Every page that gets compiled and shipped. Tailwind scans all of them so one
 // stylesheet covers the whole site.
-const PAGES = ['index.html', 'training.html', 'results.html', 'practice.html']
+const PAGES = ['index.html', 'training.html', 'results.html', 'practice.html', 'video.html']
 
 /** Pull the app source out of the single <script type="text/babel"> block. */
 function extractAppSource(html) {
@@ -36,12 +36,17 @@ function extractAppSource(html) {
   return html.slice(bodyStart, bodyEnd)
 }
 
-/** Generate the minimal Tailwind stylesheet for the classes used in index.html. */
+/** Generate the minimal Tailwind stylesheet for the classes used across the pages. */
 function buildCss() {
   mkdirSync(tmp, { recursive: true })
   const input = join(tmp, 'input.css')
   const output = join(tmp, 'output.css')
-  writeFileSync(input, `@import "tailwindcss";\n@source "${join(root, 'index.html').replace(/\\/g, '/')}";\n`)
+  // Name every page explicitly. Tailwind v4 also auto-detects sources from the
+  // project root, which is what was covering the other pages before, but relying
+  // on that means a class used only on one page can vanish from the stylesheet
+  // if the detection rules ever change.
+  const sources = PAGES.map((p) => `@source "${join(root, p).replace(/\\/g, '/')}";`).join('\n')
+  writeFileSync(input, `@import "tailwindcss";\n${sources}\n`)
   // Invoke the CLI's JS entry directly rather than through npx: no shell involved,
   // so this behaves identically on Windows and on the Linux CI runner.
   const cli = join(root, 'node_modules/@tailwindcss/cli/dist/index.mjs')

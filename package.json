@@ -6,7 +6,7 @@
   "description": "Decision calculator for Project Hedgehog image rating tasks. Source of truth is index.html; npm run build emits a fully self-contained dist/index.html.",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test scoring.test.mjs"
+    "test": "node --test scoring.test.mjs video.test.mjs"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
