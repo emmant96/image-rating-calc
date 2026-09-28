@@ -275,6 +275,14 @@
           )
         }
 
+        if (overall === 0) {
+          add(
+            'check',
+            'Your overall is a tie',
+            'You are asked to pick a winner even when it is close. A tie here needs a reason you could say out loud: the same flaw, as often, and as bad, in both clips, and you checked both.'
+          )
+        }
+
         if (!complete) {
           flags.sort((x, y) => LEVEL_RANK[x.level] - LEVEL_RANK[y.level])
           return { complete, filled, total, overall, tally: { winsA, winsB, ties, net, judged: judged.length }, flags }
@@ -283,19 +291,14 @@
         const nonTie = judged.filter((v) => v !== 0)
 
         if (overall === 0 && ties === judged.length) {
+          // The stronger warning replaces the milder one rather than stacking.
+          flags.splice(flags.findIndex((f) => f.title === 'Your overall is a tie'), 1)
           add(
             'stop',
             'You tied everything',
             'Nobody learns anything from a sheet where every row is a tie. One rater who did this on a hard pair was scored 2 out of 5. If you cannot name a single row where one video is better, watch both again. There is almost always something.'
           )
         } else {
-          if (overall === 0) {
-            add(
-              'check',
-              'Your overall is a tie',
-              'You are asked to pick a winner even when it is close. A tie here needs a reason you could say out loud: the same flaw, as often, and as bad, in both clips, and you checked both.'
-            )
-          }
           if (judged.length >= 4 && ties >= Math.ceil(judged.length * 0.6)) {
             add(
               'check',
@@ -455,6 +458,27 @@
           'Against {W}: [name one thing the winner gets wrong too].',
           'What is wrong with {W}: [name a flaw in the winner, so this is not a clean sweep with nothing said].',
         ],
+        // Used when the form asks for Overall and nothing else. There is no row
+        // to point at, so the skeleton asks straight out for the things a
+        // justification is marked on: one concrete moment, a fault in the
+        // winner, and what the loser does better.
+        example: [
+          'The clearest example: [name one thing you saw and when, such as the camera stutters at 0:04].',
+          'What made it obvious: [name the moment and the time you saw it].',
+          'The thing that decided it: [name what happens, in which clip, and when].',
+        ],
+        againstWinner: [
+          'Against {W}: [name one thing the winner gets wrong too].',
+          '{W} is not perfect either: [name a fault in the video you picked].',
+        ],
+        loserBetter: [
+          '{L} does do better on: [name the one thing {L} wins, and say why it does not outweigh the rest].',
+          'In fairness to {L}: [name what it does better, and why {W} still wins].',
+        ],
+        tieEvidence: [
+          'The same in both: [name the flaw you found in each clip, and roughly when, so it is clear you checked both].',
+          'What makes it level: [name the flaw that turns up as often and as badly in both clips].',
+        ],
         tradeoff: [
           'Trade-off: {L} does take {loseList}, but [say why that matters less].',
           '{L} wins {loseList}, and [say why {W} is still the better video].',
@@ -478,13 +502,18 @@
       const capitalise = (t) => t.charAt(0).toUpperCase() + t.slice(1)
 
       /**
-       * Build the skeleton. Returns null until every row, Overall included, has a
-       * value, because a half scored sheet would produce sentences the rater has
-       * not actually decided yet.
+       * Build the skeleton.
+       *
+       * It needs Overall and nothing else, because some forms ask for Overall
+       * alone. On those the rows are still what you look at, they are just not
+       * fields you submit, so the justification still has to carry the same
+       * things: one concrete moment, a fault in the winner, and what the loser
+       * does better. With no rows scored the skeleton asks for those directly.
+       * Score a row and its own line replaces the generic ask.
        */
       function buildVideoStarter(scores, seed) {
+        if (scores.overall === undefined) return null
         const review = reviewVideo(scores)
-        if (!review.complete) return null
         const s = seed || 0
         const overall = scores.overall
         const W = overall > 0 ? 'A' : overall < 0 ? 'B' : 'T'
@@ -528,25 +557,41 @@
           )
         }
 
-        // 4. The lines the warnings say are missing. These are the parts raters
-        //    actually get marked down for, so they go in the skeleton rather than
-        //    sitting as advice beside it.
-        const warned = review.flags.map((f) => f.title)
-        if (warned.indexOf('One video won every single row') !== -1) {
-          lines.push(fillTemplate(pick(PHRASES.sweep, s, 10), { W, L }))
-        }
-        if (warned.indexOf('Your overall pick lost every row') !== -1) {
-          lines.push(fillTemplate(pick(PHRASES.opposed, s, 11), { W, L }))
+        // 4. At least one concrete moment. A scored row already carries its own,
+        //    so this only appears when nothing below Overall was scored, which is
+        //    exactly the Overall only form. Without it the whole justification
+        //    would be an opinion with no evidence under it.
+        if (W !== 'T' && split.length === 0 && even.length === 0 && na.length === 0) {
+          lines.splice(1, 0, pick(PHRASES.example, s, 10))
         }
 
-        // 5. The trade off, which reviewers say is the part most often absent.
-        if (W !== 'T') {
-          const lost = split
-            .filter((k) => (W === 'A' ? scores[k] < 0 : scores[k] > 0))
-            .map((k) => AXIS_PHRASE[k])
-          if (lost.length) {
-            lines.push(fillTemplate(pick(PHRASES.tradeoff, s, 12), { W, L, loseList: listOf(lost) }))
-          }
+        // 5. The lines reviewers say are missing most often: something against
+        //    the winner, and what the loser does better. On a finished sheet the
+        //    warnings and the scores decide whether these are needed. With no
+        //    rows to read, ask for both every time.
+        const warned = review.flags.map((f) => f.title)
+        const lost = split
+          .filter((k) => (W === 'A' ? scores[k] < 0 : scores[k] > 0))
+          .map((k) => AXIS_PHRASE[k])
+
+        if (warned.indexOf('One video won every single row') !== -1) {
+          lines.push(fillTemplate(pick(PHRASES.sweep, s, 11), { W, L }))
+        } else if (!review.complete && W !== 'T') {
+          // Nothing scored disagrees with the pick yet, so the fault in the
+          // winner has to be asked for rather than inferred.
+          lines.push(fillTemplate(pick(PHRASES.againstWinner, s, 11), { W, L }))
+        }
+
+        if (warned.indexOf('Your overall pick lost every row') !== -1) {
+          lines.push(fillTemplate(pick(PHRASES.opposed, s, 12), { W, L }))
+        }
+
+        if (W === 'T') {
+          if (!review.complete) lines.push(pick(PHRASES.tieEvidence, s, 13))
+        } else if (lost.length) {
+          lines.push(fillTemplate(pick(PHRASES.tradeoff, s, 13), { W, L, loseList: listOf(lost) }))
+        } else if (!review.complete) {
+          lines.push(fillTemplate(pick(PHRASES.loserBetter, s, 13), { W, L }))
         }
 
         return lines.join(' ')
@@ -573,13 +618,14 @@
         // A filled blank is a short observation, about seven words in the
         // examples the guidance quotes.
         const words = fixed + blanks * 7
-        return { blanks, words, roomy: blanks <= 7 && words >= 45 && words <= 130 }
+        // The floor is set below what an Overall only sheet produces, since that
+        // is a legitimate shape and not a thin answer.
+        return { blanks, words, roomy: blanks <= 7 && words >= 35 && words <= 130 }
       }
 
       /** Every wording for every slot, so seven people do not submit one sentence. */
       function videoStarterAlternatives(scores) {
-        const review = reviewVideo(scores)
-        if (!review.complete) return []
+        if (scores.overall === undefined) return []
         const overall = scores.overall
         const W = overall > 0 ? 'A' : overall < 0 ? 'B' : 'T'
         const L = W === 'A' ? 'B' : 'A'
@@ -881,7 +927,7 @@
         )
       }
 
-      function ReviewCard({ review }) {
+      function ReviewCard({ review, overallOnly }) {
         const overall = review.overall
         const side = overall === undefined ? null : overall > 0 ? 'A' : overall < 0 ? 'B' : 'T'
         const label = overall === undefined ? null : (OPTIONS.find((o) => o.value === overall) || {}).label
@@ -892,7 +938,7 @@
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Your call</h2>
               <span className="rounded-md bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-400">
-                {review.filled}/{review.total}
+                {overallOnly ? (review.overall === undefined ? '0/1' : '1/1') : review.filled + '/' + review.total}
               </span>
             </div>
 
@@ -915,6 +961,8 @@
               </React.Fragment>
             )}
 
+            {/* A row split is only worth showing when the form actually takes rows. */}
+            {!overallOnly && (
             <div className="mt-5 border-t border-white/10 pt-4">
               <div className="flex items-baseline justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">How the rows split</span>
@@ -945,6 +993,7 @@
                 copying it into the overall row is marked wrong.
               </p>
             </div>
+            )}
 
             {flags.length > 0 && (
               <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
@@ -979,7 +1028,7 @@
         )
       }
 
-      function FeedbackStarter({ text, cost, alternatives, onReword }) {
+      function FeedbackStarter({ text, cost, alternatives, onReword, builtFrom }) {
         const [showBank, setShowBank] = useState(false)
         const [status, setStatus] = useState('idle')
         const textRef = useRef(null)
@@ -1051,9 +1100,11 @@
               </span>
             </div>
 
+            <p className="mt-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">{builtFrom}</p>
+
             <p
               ref={textRef}
-              className="mt-3 max-h-72 overflow-y-auto rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-300 selection:bg-indigo-500/40"
+              className="mt-2 max-h-72 overflow-y-auto rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-300 selection:bg-indigo-500/40"
             >
               {text}
             </p>
@@ -1081,8 +1132,9 @@
 
             <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
               Swap each blank for the moment you actually saw, with a time where you can give one, such as "his
-              face goes blurry at 0:07 after the cut". Never "B looks better". Only the rows that separated the
-              two clips get their own line, so this should take about four minutes.
+              face goes blurry at 0:07 after the cut". Never "B looks better". You should be able to finish it in
+              about four minutes. If you cannot answer a blank from what you watched, go back and look rather
+              than guessing at it.
             </p>
 
             {alternatives && alternatives.length > 0 && (
@@ -1120,6 +1172,10 @@
         const [scores, setScores] = useState({})
         const [beats, setBeats] = useState([])
         const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
+        // Some forms ask for Overall and nothing else. The rows below stay on
+        // screen either way, because they are still what you look at, but this
+        // stops the page nagging for scores the form will never take.
+        const [overallOnly, setOverallOnly] = useState(false)
 
         // Nothing on this page runs on a clock. Scores stay exactly where the
         // rater put them until they press the clear button themselves.
@@ -1141,6 +1197,17 @@
         const starter = useMemo(() => buildVideoStarter(scores, seed), [scores, seed])
         const cost = useMemo(() => skeletonCost(starter), [starter])
         const alternatives = useMemo(() => videoStarterAlternatives(scores), [scores])
+
+        // Say plainly what the skeleton was built from, so nobody copies one
+        // that is still half written on a form that wanted every row.
+        const rowsScored = TASK.axes.filter((k) => k !== 'overall' && scores[k] !== undefined).length
+        const builtFrom = !rowsScored
+          ? 'From your overall pick only'
+          : review.complete
+            ? 'From all ' + TASK.axes.length + ' rows'
+            : overallOnly
+              ? 'From overall plus ' + rowsScored + ' of your own notes'
+              : 'From overall plus ' + rowsScored + ' rows, ' + (TASK.axes.length - 1 - rowsScored) + ' still unscored'
 
         // Number keys score the next unfilled row, backspace undoes the last.
         useEffect(() => {
@@ -1211,7 +1278,32 @@
                       through. Watching properly takes five to six minutes, which leaves about four to write. Go
                       one row at a time, watching again for each.
                     </p>
+
+                    <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700/70 bg-slate-950/40 p-3">
+                      <input
+                        type="checkbox"
+                        checked={overallOnly}
+                        onChange={(e) => setOverallOnly(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-500"
+                      />
+                      <span className="text-xs leading-relaxed text-slate-400">
+                        <span className="font-semibold text-slate-200">This task only asks for Overall.</span> The
+                        rows stay below either way, because they are still what you look at. Tick this and the page
+                        stops counting them as missing, and treats anything you do mark as private notes to shape
+                        your justification.
+                      </span>
+                    </label>
                   </div>
+
+                  {overallOnly && (
+                    <p className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs leading-relaxed text-slate-400">
+                      The form takes one score, but the justification is still marked on evidence. Score Overall,
+                      then mark any row below that helped you decide. Each one you mark swaps a general question in
+                      your justification for a specific one. Marking nothing is fine: you will get a shorter
+                      skeleton that asks for one concrete moment, one fault in the video you picked, and one thing
+                      the other video does better.
+                    </p>
+                  )}
 
                   <div className="flex items-baseline justify-between">
                     <h2 className="text-xl font-semibold text-slate-50">
@@ -1247,11 +1339,12 @@
                 </div>
 
                 <aside className="lg:sticky lg:top-8">
-                  <ReviewCard review={review} />
+                  <ReviewCard review={review} overallOnly={overallOnly} />
                   {starter && (
                     <FeedbackStarter
                       text={starter}
                       cost={cost}
+                      builtFrom={builtFrom}
                       alternatives={alternatives}
                       onReword={() => setSeed((s) => s + 1)}
                     />

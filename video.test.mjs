@@ -269,11 +269,86 @@ test('nothing clears the scores except the rater', () => {
 
 /* ---------------- justification skeleton ---------------- */
 
-test('no skeleton until every row including overall is scored', () => {
+test('no skeleton until Overall is picked, and none needed after that', () => {
   assert.equal(video.buildVideoStarter({}), null)
+  // Rows without an overall give nothing, because the justification opens on
+  // the call and there is no call yet.
   const missingOverall = fill(1)
   delete missingOverall.overall
   assert.equal(video.buildVideoStarter(missingOverall), null)
+  // Overall on its own is enough, because some forms ask for nothing else.
+  assert.ok(video.buildVideoStarter({ overall: 1 }))
+})
+
+/* ---------------- forms that ask for Overall only ---------------- */
+
+test('Overall alone still produces a usable justification', () => {
+  const text = video.buildVideoStarter({ overall: 1 }, 0)
+  assert.match(text, /^I slightly prefer Response A/)
+  // The three things a justification is marked on, asked for directly because
+  // there is no scored row to point at.
+  assert.match(text, /clearest example|made it obvious|thing that decided it/i, 'needs one concrete moment')
+  assert.match(text, /Against A|A is not perfect/i, 'needs a fault in the winner')
+  assert.match(text, /B does do better|In fairness to B/i, 'needs what the loser does better')
+  assert.ok(text.split(/\s+/).length >= 20, 'would be rejected as too short')
+})
+
+test('an Overall only justification is not flagged as too thin', () => {
+  for (const overall of [2, 1, -1, -2]) {
+    const cost = video.skeletonCost(video.buildVideoStarter({ overall }, 0))
+    assert.equal(cost.roomy, true, `overall ${overall} came out as ${cost.words} words, ${cost.blanks} blanks`)
+    assert.ok(cost.blanks >= 3, 'an overall only sheet still has to carry real evidence')
+    assert.ok(cost.blanks <= 5, `${cost.blanks} blanks is too many for a one score form`)
+  }
+})
+
+test('an Overall only tie asks for the flaw that appears in both', () => {
+  const text = video.buildVideoStarter({ overall: 0 }, 0)
+  assert.match(text, /same in both|makes it level/i)
+  // A tie has no winner, so it must not ask for a fault in one, and it must
+  // not ask what made one obviously better.
+  assert.doesNotMatch(text, /Against [AB]/)
+  assert.doesNotMatch(text, /not perfect either|does do better|In fairness/i)
+  assert.doesNotMatch(text, /clearest example|made it obvious|thing that decided it/i)
+})
+
+test('a tie is warned about the moment it is picked, rows or no rows', () => {
+  // An Overall only form never completes, so this warning cannot wait for rows.
+  const early = video.reviewVideo({ overall: 0 })
+  assert.equal(early.complete, false)
+  assert.ok(titles(early).includes('Your overall is a tie'))
+
+  // On a finished sheet where everything tied, the stronger warning replaces it
+  // rather than both appearing.
+  const all = video.reviewVideo(fill(0))
+  assert.ok(titles(all).includes('You tied everything'))
+  assert.ok(!titles(all).includes('Your overall is a tie'), 'the two warnings should not stack')
+})
+
+test('marking a row swaps the general question for a specific one', () => {
+  const generic = video.buildVideoStarter({ overall: 1 }, 0)
+  const withRow = video.buildVideoStarter({ overall: 1, motion: -2 }, 0)
+  // The row brings its own evidence, so the catch-all example line steps aside.
+  assert.match(generic, /clearest example|made it obvious|thing that decided it/i)
+  assert.doesNotMatch(withRow, /clearest example|made it obvious|thing that decided it/i)
+  assert.ok(withRow.includes('motion and temporal quality'))
+  // And the thing the loser wins is now named rather than asked for blind.
+  assert.doesNotMatch(withRow, /does do better|In fairness/i)
+  assert.match(withRow, /Trade-off|B wins/i)
+})
+
+test('a part scored sheet still asks for a fault in the winner', () => {
+  // Nothing scored so far disagrees with the pick, so it has to be asked for.
+  const text = video.buildVideoStarter({ overall: 1, instruction: 1 }, 0)
+  assert.match(text, /Against A|A is not perfect/i)
+})
+
+test('the alternatives bank works from Overall alone', () => {
+  const bank = video.videoStarterAlternatives({ overall: 1 })
+  assert.ok(bank.length >= 1)
+  assert.equal(bank[0].slot, 'Overall')
+  assert.ok(bank[0].options.length >= 2)
+  assert.deepEqual(video.videoStarterAlternatives({}), [])
 })
 
 test('the skeleton fits what four minutes of writing can carry', () => {
