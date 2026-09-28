@@ -437,9 +437,11 @@
           'Response {W} has the narrow edge: [name the one thing that decided it].',
           'On balance Response {W} is the better video: [say what you kept coming back to].',
         ],
+        // These must not ask for the shared flaw, because the tie evidence line
+        // that always follows them asks for exactly that.
         overallTie: [
-          'Neither video is stronger: [say what you compared and why it came out even].',
-          'I cannot separate the two: [name the flaw that shows up as often and as badly in both].',
+          'Neither video is stronger: [say what you were weighing up].',
+          'I cannot separate these two: [say what you expected to decide it].',
         ],
         wins: [
           'On {axis}, {W} is stronger: [{ev}].',
@@ -465,7 +467,7 @@
         example: [
           'The clearest example: [name one thing you saw and when, such as the camera stutters at 0:04].',
           'What made it obvious: [name the moment and the time you saw it].',
-          'The thing that decided it: [name what happens, in which clip, and when].',
+          'Where you can see it: [name what happens, in which clip, and when].',
         ],
         againstWinner: [
           'Against {W}: [name one thing the winner gets wrong too].',
@@ -476,8 +478,14 @@
           'In fairness to {L}: [name what it does better, and why {W} still wins].',
         ],
         tieEvidence: [
-          'The same in both: [name the flaw you found in each clip, and roughly when, so it is clear you checked both].',
+          'The same in both: [name the flaw you found in each clip, and roughly when].',
           'What makes it level: [name the flaw that turns up as often and as badly in both clips].',
+        ],
+        // A tie is only allowed when you checked both and found nothing, so
+        // saying where you looked is the requirement, not padding.
+        tieChecked: [
+          'Neither one pulls ahead anywhere else either: [name the other things you went through and found level].',
+          'I went back through both and nothing else separated them: [name what you checked].',
         ],
         tradeoff: [
           'Trade-off: {L} does take {loseList}, but [say why that matters less].',
@@ -489,7 +497,17 @@
         ],
       }
 
-      const pick = (list, seed, offset) => list[Math.abs(seed + offset) % list.length]
+      function pick(list, seed, offset) {
+        // Mix the seed into the slot rather than adding to it. Plain addition
+        // advanced every slot by one on each reword, which collapsed the whole
+        // skeleton to the lowest common multiple of the list lengths: six
+        // wordings in total, where seven people share a task.
+        let h = Math.imul(seed ^ (offset + 0x9e3779b9), 0x85ebca6b)
+        h ^= h >>> 13
+        h = Math.imul(h, 0xc2b2ae35)
+        h ^= h >>> 16
+        return list[(h >>> 0) % list.length]
+      }
 
       const fillTemplate = (template, vars) =>
         template.replace(/\{(\w+)\}/g, (m, key) => (key in vars ? vars[key] : m))
@@ -587,7 +605,12 @@
         }
 
         if (W === 'T') {
-          if (!review.complete) lines.push(pick(PHRASES.tieEvidence, s, 13))
+          if (!review.complete) {
+            lines.push(pick(PHRASES.tieEvidence, s, 13))
+            if (split.length === 0 && even.length === 0 && na.length === 0) {
+              lines.push(pick(PHRASES.tieChecked, s, 14))
+            }
+          }
         } else if (lost.length) {
           lines.push(fillTemplate(pick(PHRASES.tradeoff, s, 13), { W, L, loseList: listOf(lost) }))
         } else if (!review.complete) {
@@ -668,6 +691,11 @@
 
         return out
       }
+
+      /* Exposed so the tests can assert that a line came from the right bank
+       * rather than hardcoding its wording, which made rewording a phrase break
+       * tests that were not about that phrase. */
+      const PHRASE_BANK = PHRASES
 
       /* ---8<--- VIDEO END */
 

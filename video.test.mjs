@@ -25,7 +25,7 @@ function loadVideo() {
   const source = html.slice(html.indexOf('*/', startMarker) + 2, html.lastIndexOf('/*', endMarker))
   return new Function(
     source +
-      '\n return { reviewVideo, buildVideoStarter, videoStarterAlternatives, skeletonCost, beatSuggestion, TASK, AXES, NA, optionsFor }'
+      '\n return { reviewVideo, buildVideoStarter, videoStarterAlternatives, skeletonCost, beatSuggestion, TASK, AXES, NA, optionsFor, PHRASE_BANK }'
   )()
 }
 
@@ -39,6 +39,32 @@ const fill = (value, over) =>
   )
 
 const titles = (r) => r.flags.map((f) => f.title)
+
+/**
+ * Did this skeleton take a line from that bank?
+ *
+ * Matched on the fixed part of the template, up to its first blank, so
+ * rewording a phrase does not break a test that is not about that phrase. An
+ * earlier version spelled the wordings out in regexes, and three unrelated
+ * tests failed the moment one line was rephrased.
+ */
+const opener = (template, W, L) =>
+  template
+    .replace(/\{W\}/g, W)
+    .replace(/\{L\}/g, L)
+    // Split on anything the builder fills in later, then keep the longest run
+    // of literal text. Cutting at the first blank was not enough: a template
+    // like "{L} wins {loseList}, and [...]" starts with a placeholder and has
+    // another in the middle, so its fixed part is neither at the front nor in
+    // one piece.
+    .split(/\{\w+\}|\[[^\]]*\]/)
+    .map((part) => part.trim())
+    .sort((a, b) => b.length - a.length)[0]
+
+const usesOneOf = (text, bank, W = 'A', L = 'B') =>
+  bank.some((t) => text.includes(opener(t, W, L)))
+
+const P = video.PHRASE_BANK
 
 /* ---------------- the rule that makes this page different ---------------- */
 
@@ -287,9 +313,9 @@ test('Overall alone still produces a usable justification', () => {
   assert.match(text, /^I slightly prefer Response A/)
   // The three things a justification is marked on, asked for directly because
   // there is no scored row to point at.
-  assert.match(text, /clearest example|made it obvious|thing that decided it/i, 'needs one concrete moment')
-  assert.match(text, /Against A|A is not perfect/i, 'needs a fault in the winner')
-  assert.match(text, /B does do better|In fairness to B/i, 'needs what the loser does better')
+  assert.ok(usesOneOf(text, P.example), 'needs one concrete moment')
+  assert.ok(usesOneOf(text, P.againstWinner), 'needs a fault in the winner')
+  assert.ok(usesOneOf(text, P.loserBetter), 'needs what the loser does better')
   assert.ok(text.split(/\s+/).length >= 20, 'would be rejected as too short')
 })
 
@@ -304,12 +330,13 @@ test('an Overall only justification is not flagged as too thin', () => {
 
 test('an Overall only tie asks for the flaw that appears in both', () => {
   const text = video.buildVideoStarter({ overall: 0 }, 0)
-  assert.match(text, /same in both|makes it level/i)
+  assert.ok(usesOneOf(text, P.tieEvidence))
+  assert.ok(usesOneOf(text, P.tieChecked), 'a tie has to show it checked both')
   // A tie has no winner, so it must not ask for a fault in one, and it must
   // not ask what made one obviously better.
-  assert.doesNotMatch(text, /Against [AB]/)
-  assert.doesNotMatch(text, /not perfect either|does do better|In fairness/i)
-  assert.doesNotMatch(text, /clearest example|made it obvious|thing that decided it/i)
+  assert.ok(!usesOneOf(text, P.againstWinner))
+  assert.ok(!usesOneOf(text, P.loserBetter))
+  assert.ok(!usesOneOf(text, P.example))
 })
 
 test('a tie is warned about the moment it is picked, rows or no rows', () => {
@@ -329,18 +356,18 @@ test('marking a row swaps the general question for a specific one', () => {
   const generic = video.buildVideoStarter({ overall: 1 }, 0)
   const withRow = video.buildVideoStarter({ overall: 1, motion: -2 }, 0)
   // The row brings its own evidence, so the catch-all example line steps aside.
-  assert.match(generic, /clearest example|made it obvious|thing that decided it/i)
-  assert.doesNotMatch(withRow, /clearest example|made it obvious|thing that decided it/i)
+  assert.ok(usesOneOf(generic, P.example))
+  assert.ok(!usesOneOf(withRow, P.example))
   assert.ok(withRow.includes('motion and temporal quality'))
   // And the thing the loser wins is now named rather than asked for blind.
-  assert.doesNotMatch(withRow, /does do better|In fairness/i)
-  assert.match(withRow, /Trade-off|B wins/i)
+  assert.ok(!usesOneOf(withRow, P.loserBetter))
+  assert.ok(usesOneOf(withRow, P.tradeoff))
 })
 
 test('a part scored sheet still asks for a fault in the winner', () => {
   // Nothing scored so far disagrees with the pick, so it has to be asked for.
   const text = video.buildVideoStarter({ overall: 1, instruction: 1 }, 0)
-  assert.match(text, /Against A|A is not perfect/i)
+  assert.ok(usesOneOf(text, P.againstWinner))
 })
 
 test('the alternatives bank works from Overall alone', () => {
@@ -397,24 +424,28 @@ test('every row that split gets its own line with its own evidence', () => {
   assert.match(text, /motion and temporal quality, B|B leads on motion and temporal quality|B is ahead on motion and temporal quality/)
 })
 
-test('the skeleton opens on the overall', () => {
-  const text = video.buildVideoStarter(fill(1, { overall: 2 }), 0)
-  assert.match(text, /^I strongly prefer Response A/)
-  const slight = video.buildVideoStarter(fill(1), 0)
-  assert.match(slight, /^I slightly prefer Response A/)
+test('the skeleton opens on the overall, at every seed', () => {
+  // Across seeds, because the wording rotates. Whichever one comes up, the
+  // first thing in the justification has to be the overall call.
+  for (let seed = 0; seed < 40; seed++) {
+    const strong = video.buildVideoStarter(fill(1, { overall: 2 }), seed)
+    assert.ok(P.overallStrong.some((t) => strong.startsWith(opener(t, 'A', 'B'))), strong.slice(0, 70))
+    const slight = video.buildVideoStarter(fill(1), seed)
+    assert.ok(P.overallSlight.some((t) => slight.startsWith(opener(t, 'A', 'B'))), slight.slice(0, 70))
+  }
 })
 
 test('the skeleton writes in the lines the warnings ask for', () => {
   const sweep = video.buildVideoStarter(fill(1), 0)
-  assert.match(sweep, /Against A|What is wrong with A/i, 'a sweep must say something against the winner')
+  assert.ok(usesOneOf(sweep, P.sweep), 'a sweep must say something against the winner')
 
   const opposed = video.buildVideoStarter(fill(-1, { overall: 1 }), 0)
-  assert.match(opposed, /rows lean to B|against the rows on purpose/i)
+  assert.ok(usesOneOf(opposed, P.opposed))
 })
 
 test('the skeleton names the trade-off when one exists', () => {
   const text = video.buildVideoStarter(fill(1, { motion: -2 }), 0)
-  assert.match(text, /Trade-off|B wins/i)
+  assert.ok(usesOneOf(text, P.tradeoff))
   assert.ok(text.includes('motion and temporal quality'))
 })
 
@@ -537,4 +568,69 @@ test('no source URLs or company names leak into the video page', () => {
 test('the build ships the video page', () => {
   const build = fs.readFileSync(new URL('./build.mjs', import.meta.url), 'utf8')
   assert.match(build, /PAGES\s*=\s*\[[^\]]*'video\.html'/, 'video.html is missing from the build list')
+})
+
+/* ---------------- what a rater actually ends up submitting ---------------- */
+
+const realWords = (t) => t.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w)).length
+
+/** Simulate a rater replacing every blank with an n word observation. */
+const asFilled = (text, n) => text.replace(/\[[^\]]+\]/g, Array(n).fill('xx').join(' '))
+
+test('even a terse filling clears the twenty word floor', () => {
+  // Answers under twenty words are rejected outright. Someone who answers every
+  // blank in three words has done the work and must not be failed on length,
+  // and a tie picked on its own used to come out at fourteen words.
+  for (const overall of [2, 1, 0, -1, -2]) {
+    const text = video.buildVideoStarter({ overall }, 0)
+    const words = realWords(asFilled(text, 3))
+    assert.ok(words >= 20, `overall ${overall} filled tersely is only ${words} words`)
+  }
+})
+
+test('the wordings do not move in lockstep when reworded', () => {
+  // Seven people share a task. An earlier picker added the seed to a fixed slot
+  // number, so every slot advanced together and the whole skeleton had six
+  // forms in total however many times it was reworded.
+  const counts = {}
+  for (const scores of [{ overall: 1 }, { overall: 0 }, fill(1, { overall: 1, motion: -2, audio: 0 })]) {
+    const seen = new Set()
+    for (let seed = 0; seed < 300; seed++) seen.add(video.buildVideoStarter(scores, seed))
+    counts[JSON.stringify(scores).slice(0, 24)] = seen.size
+  }
+  for (const [shape, n] of Object.entries(counts)) {
+    assert.ok(n >= 8, `${shape} only has ${n} distinct wordings, too few for a team of seven`)
+  }
+})
+
+test('no wording asks for the same thing twice in one skeleton', () => {
+  // Two banks whose lines land next to each other must not both ask for the
+  // deciding thing, or the shared flaw. Found by reading every combination
+  // rather than the one that seed zero happens to produce.
+  const overlaps = [
+    [P.overallSlight, P.example],
+    [P.overallStrong, P.example],
+    [P.overallTie, P.tieEvidence],
+    [P.tieEvidence, P.tieChecked],
+    [P.againstWinner, P.loserBetter],
+  ]
+  // A crude but effective check: the distinctive words of one line should not
+  // all reappear in the line that follows it.
+  const key = (t) => new Set(
+    t.toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/)
+      .filter((w) => w.length > 3 && !['name', 'what', 'that', 'this', 'with', 'from', 'your', 'both', 'says', 'they', 'them', 'have', 'does', 'video', 'clip', 'clips', 'response'].includes(w))
+  )
+  for (const [bankA, bankB] of overlaps) {
+    for (const a of bankA) {
+      for (const b of bankB) {
+        const ka = key(a)
+        const kb = key(b)
+        const shared = [...ka].filter((w) => kb.has(w))
+        assert.ok(
+          shared.length < Math.min(ka.size, kb.size) * 0.6,
+          `these two lines ask for nearly the same thing:\n  ${a}\n  ${b}\n  shared: ${shared.join(', ')}`
+        )
+      }
+    }
+  }
 })
