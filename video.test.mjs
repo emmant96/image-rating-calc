@@ -25,7 +25,7 @@ function loadVideo() {
   const source = html.slice(html.indexOf('*/', startMarker) + 2, html.lastIndexOf('/*', endMarker))
   return new Function(
     source +
-      '\n return { reviewVideo, buildVideoStarter, videoStarterAlternatives, skeletonCost, beatSuggestion, paceNote, TASK, AXES, NA, optionsFor, BUDGET_SECONDS }'
+      '\n return { reviewVideo, buildVideoStarter, videoStarterAlternatives, skeletonCost, beatSuggestion, TASK, AXES, NA, optionsFor }'
   )()
 }
 
@@ -246,25 +246,25 @@ test('unchecked beats are ignored', () => {
   assert.equal(s.value, 0)
 })
 
-/* ---------------- the ten minute budget ---------------- */
+/* ---------------- nothing runs on a clock ---------------- */
 
-test('the budget is ten minutes', () => {
-  assert.equal(video.BUDGET_SECONDS, 600)
+test('the page has no timer', () => {
+  // Asked for directly, and it also settles the worry behind the request: a
+  // countdown that could be seen running down reads like a countdown that
+  // might take your scores with it when it hits zero.
+  const html = fs.readFileSync(new URL('./video.html', import.meta.url), 'utf8')
+  assert.equal(html.includes('setInterval'), false, 'something on the page ticks')
+  assert.equal(video.paceNote, undefined, 'the pace note should be gone with the clock')
 })
 
-test('the pace note fires at both ends and stays quiet in between', () => {
-  assert.equal(video.paceNote(5), null, 'the clock has barely started')
-  const rushed = video.paceNote(99)
-  assert.ok(rushed)
-  assert.equal(rushed.level, 'check')
-  // The floor is ours, not the client's, and the page has to say so.
-  assert.match(rushed.detail, /our own/i)
-
-  assert.equal(video.paceNote(360), null, 'six minutes in is exactly on plan')
-
-  const late = video.paceNote(560)
-  assert.ok(late, 'approaching ten minutes should say so')
-  assert.equal(late.level, 'note')
+test('nothing clears the scores except the rater', () => {
+  // The only thing that empties the sheet is the clear button's own handler.
+  // If a second thing ever resets scores, this count goes up and the test asks
+  // why.
+  const html = fs.readFileSync(new URL('./video.html', import.meta.url), 'utf8')
+  const resets = html.match(/setScores\(\{\}\)/g) || []
+  assert.equal(resets.length, 1, `${resets.length} places empty the scores, expected only the clear button`)
+  assert.equal(html.includes('setTimeout(() => setScores'), false, 'scores must never be cleared on a delay')
 })
 
 /* ---------------- justification skeleton ---------------- */

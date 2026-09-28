@@ -54,10 +54,6 @@
        * ---8<--- VIDEO START
        * ================================================================ */
 
-      /** Ten minutes on the task, most of it spent watching. */
-      const BUDGET_SECONDS = 600
-      const WATCH_SECONDS = 330
-
       const AXES = {
         overall: {
           key: 'overall',
@@ -360,41 +356,6 @@
         return { complete, filled, total, overall, tally: { winsA, winsB, ties, net, judged: judged.length }, flags }
       }
 
-      /**
-       * Pace note.
-       *
-       * The task is budgeted at ten minutes. The material gives two data points
-       * rather than a rule: an annotation at 6 minutes 20 was accepted, and one
-       * at 1 minute 39 was scored 2 out of 5 with the comment that it is less
-       * time than it takes to watch both clips once. The three minute floor
-       * below is ours, drawn from those two points plus the instruction to watch
-       * the clips more than once. Both notes are nudges, not rules.
-       */
-      function paceNote(seconds) {
-        if (!seconds || seconds < 20) return null
-        if (seconds < 180) {
-          return {
-            level: 'check',
-            title: 'That was quick',
-            detail:
-              'You are ' +
-              Math.round(seconds) +
-              ' seconds in. Watching two clips more than once takes about five minutes on its own. One rater who submitted in 1 minute 39 was marked down for exactly this. Our own floor, not a published one.',
-          }
-        }
-        if (seconds > BUDGET_SECONDS - 60) {
-          return {
-            level: 'note',
-            title: 'Close to the ten minutes',
-            detail:
-              'You are ' +
-              Math.floor(seconds / 60) +
-              ' minutes in on a ten minute task. Fill the blanks you can actually answer and submit. A short write up where every line is real beats a long one you had to guess at.',
-          }
-        }
-        return null
-      }
-
       /* ----------------------------------------------------------------
        * Justification skeleton
        *
@@ -683,12 +644,6 @@
 
       const cx = (...c) => c.filter(Boolean).join(' ')
 
-      const mmss = (s) => {
-        const m = Math.floor(s / 60)
-        const r = Math.floor(s % 60)
-        return m + ':' + (r < 10 ? '0' : '') + r
-      }
-
       /** Collapsible helper, used for the tells lists and the severity split. */
       function Disclose({ label, children }) {
         const [open, setOpen] = useState(false)
@@ -926,11 +881,11 @@
         )
       }
 
-      function ReviewCard({ review, pace }) {
+      function ReviewCard({ review }) {
         const overall = review.overall
         const side = overall === undefined ? null : overall > 0 ? 'A' : overall < 0 ? 'B' : 'T'
         const label = overall === undefined ? null : (OPTIONS.find((o) => o.value === overall) || {}).label
-        const flags = pace ? review.flags.concat([pace]) : review.flags
+        const flags = review.flags
 
         return (
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6">
@@ -1164,15 +1119,10 @@
       function App() {
         const [scores, setScores] = useState({})
         const [beats, setBeats] = useState([])
-        const [startedAt, setStartedAt] = useState(() => Date.now())
-        const [now, setNow] = useState(Date.now())
         const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
 
-        useEffect(() => {
-          const id = setInterval(() => setNow(Date.now()), 1000)
-          return () => clearInterval(id)
-        }, [])
-
+        // Nothing on this page runs on a clock. Scores stay exactly where the
+        // rater put them until they press the clear button themselves.
         const setScore = useCallback((axisKey, value) => {
           setScores((prev) => {
             const next = Object.assign({}, prev)
@@ -1185,17 +1135,9 @@
         const restart = () => {
           setScores({})
           setBeats([])
-          setStartedAt(Date.now())
         }
 
-        const elapsed = (now - startedAt) / 1000
         const review = useMemo(() => reviewVideo(scores), [scores])
-        const pace = useMemo(
-          // Only once the sheet is done, so the warning does not flash in and out
-          // while the rater is still part way through.
-          () => (review.complete ? paceNote(elapsed) : null),
-          [review.complete, Math.floor(elapsed)]
-        )
         const starter = useMemo(() => buildVideoStarter(scores, seed), [scores, seed])
         const cost = useMemo(() => skeletonCost(starter), [starter])
         const alternatives = useMemo(() => videoStarterAlternatives(scores), [scores])
@@ -1226,8 +1168,6 @@
           return () => window.removeEventListener('keydown', onKey)
         }, [scores, setScore])
 
-        const overBudget = elapsed > BUDGET_SECONDS
-
         return (
           <div className="min-h-screen bg-slate-950 text-slate-200 antialiased">
             <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
@@ -1242,15 +1182,6 @@
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={cx(
-                      'rounded-xl border px-3 py-2 font-mono text-sm',
-                      overBudget ? 'border-amber-500/50 text-amber-300' : 'border-slate-800 text-slate-400'
-                    )}
-                    title="Time on this pair, against a ten minute task"
-                  >
-                    {mmss(elapsed)} / 10:00
-                  </span>
                   <a
                     href="./index.html"
                     className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
@@ -1316,7 +1247,7 @@
                 </div>
 
                 <aside className="lg:sticky lg:top-8">
-                  <ReviewCard review={review} pace={pace} />
+                  <ReviewCard review={review} />
                   {starter && (
                     <FeedbackStarter
                       text={starter}
@@ -1329,7 +1260,7 @@
                     onClick={restart}
                     className="mt-3 w-full rounded-xl border border-slate-800 px-4 py-2.5 text-sm font-medium text-slate-400 transition hover:border-slate-600 hover:text-slate-200"
                   >
-                    Next pair, clear and restart the clock
+                    Next pair, clear the scores
                   </button>
                 </aside>
               </main>
